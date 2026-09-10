@@ -39,7 +39,10 @@ ssh pxhome "pct exec $RUNNER_CT -- ssh -o BatchMode=yes -o StrictHostKeyChecking
   root@192.168.0.$SITE_CT 'echo \"  ok: \$(hostname)\"'"
 
 echo "== 3/3 Регистрация раннера для $REPO =="
-if ssh pxhome "pct exec $RUNNER_CT -- test -f $RUNNER_DIR/.runner" 2>/dev/null; then
+# Признак завершённой регистрации — .credentials: он появляется только после
+# успешного config.sh. Файлы .runner / .runner_migrated могут остаться от копии
+# соседнего раннера и о регистрации ничего не говорят.
+if ssh pxhome "pct exec $RUNNER_CT -- test -f $RUNNER_DIR/.credentials" 2>/dev/null; then
   echo "  раннер уже зарегистрирован в $RUNNER_DIR — пропускаю"
 else
   TOKEN=$(gh api -X POST "repos/$REPO/actions/runners/registration-token" -q '.token')
@@ -52,9 +55,12 @@ mkdir -p "\$dir"
 if [[ ! -f "\$dir/config.sh" ]]; then
   # Берём ту же версию раннера, что уже работает рядом, чтобы не тянуть новую.
   cp -a /opt/actions-runner/. "\$dir/"
-  rm -rf "\$dir/_work" "\$dir/_diag" "\$dir/.runner" "\$dir/.credentials" "\$dir/.credentials_rsaparams" "\$dir/.service"
 fi
 cd "\$dir"
+# Следы чужой регистрации, скопированные вместе с каталогом. Без этого config.sh
+# говорит "already configured": у свежих версий маркер — .runner_migrated,
+# у старых — .runner, поэтому убираем оба.
+rm -rf _work _diag .runner .runner_migrated .credentials .credentials_rsaparams .service
 # config.sh не запускается от root без этого флага.
 RUNNER_ALLOW_RUNASROOT=1 ./config.sh \
   --unattended --replace \
@@ -65,6 +71,7 @@ RUNNER_ALLOW_RUNASROOT=1 ./config.sh \
   --work _work
 ./svc.sh install root
 ./svc.sh start
+sleep 3
 ./svc.sh status | head -5
 REMOTE
 fi
