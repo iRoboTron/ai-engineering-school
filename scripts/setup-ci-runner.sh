@@ -61,6 +61,22 @@ cd "\$dir"
 # говорит "already configured": у свежих версий маркер — .runner_migrated,
 # у старых — .runner, поэтому убираем оба.
 rm -rf _work _diag .runner .runner_migrated .credentials .credentials_rsaparams .service
+
+# У соседнего раннера bin и externals — АБСОЛЮТНЫЕ симлинки в /opt/actions-runner.
+# После копирования они продолжают указывать туда же, поэтому запускались бы
+# бинарники соседа, а он определяет свой каталог по расположению бинарника и
+# видит ЧУЖУЮ регистрацию — отсюда "already configured". Переводим на свои копии.
+for link in \$(find . -maxdepth 1 -type l); do
+  target=\$(readlink "\$link")
+  case "\$target" in
+    /opt/actions-runner/*)
+      local_target=\$(basename "\$target")
+      [[ -e "\$local_target" ]] || { echo "нет своей копии \$local_target" >&2; exit 1; }
+      ln -sfn "\$local_target" "\$link"
+      echo "  \$link -> \$local_target (было \$target)"
+      ;;
+  esac
+done
 # config.sh не запускается от root без этого флага.
 RUNNER_ALLOW_RUNASROOT=1 ./config.sh \
   --unattended --replace \
