@@ -44,9 +44,24 @@ find "$release" -type d -exec chmod 755 {} +
 find "$release" -type f -exec chmod 644 {} +
 
 # Пишем новый обычный файл: старый vhost может быть симлинком, его цель трогать нельзя.
+# /api/ уходит в прослойку к OpenRouter (сервис ai9-proxy, ставится setup-proxy.sh):
+# так у учеников один адрес и один сертификат на уроки и на обращения к модели.
 rm -f "$vhost"
-printf 'server {\n listen 80;\n server_name %s;\n root %s;\n index index.html;\n location / { try_files $uri $uri/ =404; }\n}\n' \
-  "$site" "$docroot" > "$vhost"
+cat > "$vhost" <<VHOST
+server {
+ listen 80;
+ server_name $site;
+ root $docroot;
+ index index.html;
+ location / { try_files \$uri \$uri/ =404; }
+ location /api/ {
+  proxy_pass http://127.0.0.1:8099;
+  proxy_set_header Host \$host;
+  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+  proxy_read_timeout 180s;
+ }
+}
+VHOST
 nginx -t
 
 ln -s "$release" "$docroot.next-$id"

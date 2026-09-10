@@ -1,0 +1,21 @@
+[Unit]
+Description=ai9 proxy (OpenRouter для уроков)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/ai9-proxy.env
+WorkingDirectory=/opt/ai9-proxy
+ExecStart=/opt/ai9-proxy/.venv/bin/uvicorn app:app --host 127.0.0.1 --port 8099
+Restart=always
+RestartSec=3
+# Ограничения: сервис ходит только в сеть и пишет свой лог.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/ai9-proxy
+
+[Install]
+WantedBy=multi-user.target
