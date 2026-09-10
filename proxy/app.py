@@ -9,6 +9,7 @@
 Наружу отдаёт тот же формат, что и OpenAI/OpenRouter, поэтому в ноутбуках работает
 обычный клиент `openai` — достаточно указать base_url и «ключ» = код класса.
 """
+import asyncio
 import json
 import os
 import time
@@ -26,14 +27,30 @@ CLASS_TOKENS = {t.strip() for t in os.environ.get("AI9_CLASS_TOKENS", "").split(
 UPSTREAM = os.environ.get("AI9_UPSTREAM", "https://openrouter.ai/api/v1")
 LOG_PATH = Path(os.environ.get("AI9_LOG", "/var/log/ai9-proxy/usage.jsonl"))
 
-# Разрешённые модели. Бесплатные варианты OpenRouter — на них курс и рассчитан.
-ALLOWED_MODELS = {
-    "deepseek/deepseek-chat-v3.1:free",
-    "meta-llama/llama-3.3-70b-instruct:free",
-    "qwen/qwen-2.5-72b-instruct:free",
-    "google/gemma-3-27b-it:free",
-}
-DEFAULT_MODEL = os.environ.get("AI9_DEFAULT_MODEL", "deepseek/deepseek-chat-v3.1:free")
+# Разрешённые модели.
+#
+# Почему не бесплатные (:free): они общие на всех пользователей OpenRouter, поэтому
+# на втором-третьем запросе подряд отвечают «слишком много запросов», а часть из них
+# подмешивает в ответ собственные размышления («We need to output only the name...»)
+# и обрывается на полуслове. Для урока это негодно.
+#
+# Эти четыре — дешёвые платные: отвечают коротко и по делу, знают русский, умеют
+# вызов инструментов (тема 4) и структурированный ответ (тема 1). Выход стоит
+# 0,03–0,15 доллара за миллион токенов: полный прогон всех лабораторных классом
+# из 30 человек обходится примерно в четверть доллара.
+#
+# Список меняется у самого OpenRouter, поэтому его можно переопределить переменной
+# AI9_MODELS в /etc/ai9-proxy.env, не трогая код.
+MODELI_PO_UMOLCHANIYU = (
+    "qwen/qwen3.7-flash,"
+    "google/gemma-3-12b-it,"
+    "mistralai/mistral-nemo,"
+    "inception/mercury-2.5"
+)
+ALLOWED_MODELS = {m.strip() for m in os.environ.get("AI9_MODELS", MODELI_PO_UMOLCHANIYU).split(",") if m.strip()}
+# По умолчанию — та, что на проверке отвечала по-русски точнее и короче остальных.
+_DEFAULT = "qwen/qwen3.7-flash"
+DEFAULT_MODEL = os.environ.get("AI9_DEFAULT_MODEL", _DEFAULT if _DEFAULT in ALLOWED_MODELS else sorted(ALLOWED_MODELS)[0])
 
 MAX_TOKENS_CAP = int(os.environ.get("AI9_MAX_TOKENS", "1024"))   # потолок длины ответа
 MAX_INPUT_CHARS = int(os.environ.get("AI9_MAX_INPUT", "40000"))  # потолок длины запроса
@@ -80,6 +97,22 @@ def _log(record):
             handle.write(json.dumps(record, ensure_ascii=False) + "\n")
     except OSError:
         pass  # сломанный лог не должен ронять урок
+
+
+def _est_otvet(response):
+    """Есть ли в ответе непустой текст.
+
+    Некоторые модели «размышляют» и иногда возвращают пустое поле content.
+    Для урока это то же самое, что отказ: ученик видит пустоту и не понимает, почему.
+    Поэтому такой ответ считаем неудачным и пробуем следующую модель.
+    """
+    if not response.headers.get("content-type", "").startswith("application/json"):
+        return False
+    try:
+        vybory = response.json().get("choices") or []
+        return bool((vybory[0].get("message", {}).get("content") or "").strip())
+    except (ValueError, IndexError, AttributeError):
+        return False
 
 
 def _check_token(authorization, x_class_token):
@@ -130,32 +163,62 @@ async def chat(request: Request, authorization: str = Header(None), x_class_toke
     payload["max_tokens"] = min(int(payload.get("max_tokens") or MAX_TOKENS_CAP), MAX_TOKENS_CAP)
     payload.pop("stream", None)  # поток не поддерживаем: в ноутбуках он не нужен
 
-    started = time.time()
-    async with httpx.AsyncClient(timeout=120) as client:
-        try:
-            response = await client.post(
-                f"{UPSTREAM}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {OPENROUTER_KEY}",
-                    "HTTP-Referer": "https://ai9.adelfos.ru",
-                    "X-Title": "AI dlya 9 klassa",
-                },
-                json=payload,
-            )
-        except httpx.RequestError as error:
-            _log({"ts": time.time(), "token": token, "model": model, "error": str(error)})
-            raise HTTPException(502, f"Не удалось связаться с моделью: {error}")
+    # Бесплатные модели у поставщиков общие на всех, поэтому они регулярно отвечают
+    # «слишком много запросов». Для урока это смертельно: лаба делает подряд несколько
+    # запросов и обрывается на середине. Поэтому при отказе пробуем следующую модель
+    # из списка — ученик этого даже не замечает, а какая модель ответила на самом деле,
+    # видно в заголовке ответа.
+    poryadok = [model] + [m for m in sorted(ALLOWED_MODELS) if m != model]
+    VREMENNYE_OTKAZY = {429, 500, 502, 503, 504}
 
+    started = time.time()
+    response = None
+    async with httpx.AsyncClient(timeout=120) as client:
+        for popytka, kandidat in enumerate(poryadok):
+            payload["model"] = kandidat
+            try:
+                response = await client.post(
+                    f"{UPSTREAM}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {OPENROUTER_KEY}",
+                        "HTTP-Referer": "https://ai9.adelfos.ru",
+                        "X-Title": "AI dlya 9 klassa",
+                    },
+                    json=payload,
+                )
+            except httpx.RequestError as error:
+                _log({"ts": time.time(), "token": token, "model": kandidat, "error": str(error)})
+                continue
+
+            if response.status_code not in VREMENNYE_OTKAZY and _est_otvet(response):
+                break
+            _log({"ts": time.time(), "token": token, "model": kandidat,
+                  "status": response.status_code, "note": "временный отказ, пробуем следующую"})
+            if popytka == 0:
+                await asyncio.sleep(1.5)   # первой модели даём второй шанс после паузы
+
+    if response is None or not _est_otvet(response):
+        # Все кандидаты отказали или вернули пустоту. Отдаём понятную ошибку,
+        # а не сломанный ответ: иначе ученик получит невнятное падение в ноутбуке.
+        _log({"ts": time.time(), "token": token, "model": model, "note": "все модели отказали"})
+        raise HTTPException(502, "Ни одна модель сейчас не отвечает. Попробуйте через минуту.")
+
+    ispolzovana = payload["model"]
     body = response.json() if response.headers.get("content-type", "").startswith("application/json") else {}
     usage = body.get("usage", {}) if isinstance(body, dict) else {}
     _log({
         "ts": time.time(),
         "token": token,
-        "model": model,
+        "model": ispolzovana,
+        "zaprosheno": model,
         "status": response.status_code,
         "seconds": round(time.time() - started, 2),
         "prompt_tokens": usage.get("prompt_tokens"),
         "completion_tokens": usage.get("completion_tokens"),
     })
 
-    return JSONResponse(body or {"error": {"message": response.text[:500]}}, status_code=response.status_code)
+    return JSONResponse(
+        body or {"error": {"message": response.text[:500]}},
+        status_code=response.status_code,
+        headers={"X-AI9-Model": ispolzovana},
+    )

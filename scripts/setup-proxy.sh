@@ -46,6 +46,9 @@ fi
 echo "== Установка в контейнере =="
 ssh pxhome "pct exec $SITE_CT -- bash -s" <<REMOTE
 set -euo pipefail
+# В контейнере не настроена локаль — без этого apt и perl сыплют предупреждениями.
+export LC_ALL=C LANG=C DEBIAN_FRONTEND=noninteractive
+
 app='$APP_DIR'
 mkdir -p "\$app" /var/log/ai9-proxy
 tar xzf /tmp/ai9-proxy.tar.gz -C "\$app"
@@ -53,8 +56,13 @@ rm -f /tmp/ai9-proxy.tar.gz
 
 # Виртуальное окружение: пакеты прослойки не смешиваем с системными.
 if [[ ! -x "\$app/.venv/bin/python" ]]; then
-  apt-get update -qq
-  apt-get install -y -qq python3-venv >/dev/null
+  # apt дёргаем только если модуля venv действительно нет: у apt здесь нет
+  # своего stdin (его занял этот скрипт), поэтому лишний раз его не трогаем,
+  # а когда нужно — кормим /dev/null, иначе он падает на dpkg-preconfigure.
+  if ! python3 -m venv --help >/dev/null 2>&1; then
+    apt-get update -qq < /dev/null
+    apt-get install -y -qq python3-venv < /dev/null > /dev/null
+  fi
   python3 -m venv "\$app/.venv"
 fi
 "\$app/.venv/bin/pip" install -q --upgrade pip
