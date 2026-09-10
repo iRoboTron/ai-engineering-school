@@ -56,12 +56,24 @@ switched=1
 systemctl reload nginx
 
 # Дымовые проверки: сайт должен реально отдавать ключевые файлы.
+# reload у nginx асинхронный — старые воркеры доживают запросы ещё пару секунд
+# и отдают 404 по старому docroot, поэтому каждый путь проверяем с повторами.
+proverit() {
+  local path=$1 code=''
+  for _ in $(seq 1 15); do
+    code=$(curl --silent --max-time 15 --output /dev/null \
+                --write-out '%{http_code}' "http://127.0.0.1/$path" -H "Host: $site" || echo 000)
+    [[ "$code" == 200 ]] && { echo "  $path: $code"; return 0; }
+    sleep 1
+  done
+  echo "$path: ожидался 200, получен $code" >&2
+  return 1
+}
+
 for path in index.html reader.html reader-links.js files.json \
-            vendor/marked.min.js 01-llm-osnovy/book.md labs/tema1-llm-osnovy/01_tokeny.py; do
-  code=$(curl --fail --silent --show-error --max-time 15 --output /dev/null \
-              --write-out '%{http_code}' "http://127.0.0.1/$path" -H "Host: $site")
-  [[ "$code" == 200 ]] || { echo "$path: ожидался 200, получен $code" >&2; exit 1; }
-  echo "  $path: $code"
+            vendor/marked.min.js 01-llm-osnovy/book.md \
+            labs/tema1-llm-osnovy/01_tokeny.py; do
+  proverit "$path"
 done
 
 # Старые релизы: держим последние 5, остальное убираем.
