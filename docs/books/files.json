@@ -1,0 +1,134 @@
+{
+  "courses": {
+    "01-llm-osnovy": [
+      {
+        "file": "book.md",
+        "title": "Тема 1: Как устроена языковая модель"
+      },
+      {
+        "file": "chapter-01.md",
+        "title": "Урок 1. Как модель читает текст"
+      },
+      {
+        "file": "chapter-02.md",
+        "title": "Урок 2. Как модель придумывает ответ"
+      },
+      {
+        "file": "chapter-03.md",
+        "title": "Урок 3. Как модель что-то делает"
+      },
+      {
+        "file": "glossary.md",
+        "title": "Словарик темы"
+      }
+    ],
+    "02-rag": [
+      {
+        "file": "book.md",
+        "title": "Тема 2: RAG — поиск по документам"
+      },
+      {
+        "file": "chapter-01.md",
+        "title": "Урок 1. Экзамен с учебником и без"
+      },
+      {
+        "file": "chapter-02.md",
+        "title": "Урок 2. Как искать нужный кусок"
+      },
+      {
+        "file": "glossary.md",
+        "title": "Словарик темы"
+      }
+    ],
+    "03-vektory": [
+      {
+        "file": "book.md",
+        "title": "Тема 3: Векторы и поиск похожего"
+      },
+      {
+        "file": "chapter-01.md",
+        "title": "Урок 1. Смысл как точка на карте"
+      },
+      {
+        "file": "chapter-02.md",
+        "title": "Урок 2. Когда данных очень много"
+      },
+      {
+        "file": "glossary.md",
+        "title": "Словарик темы"
+      }
+    ],
+    "04-agenty": [
+      {
+        "file": "book.md",
+        "title": "Тема 4: Агенты"
+      },
+      {
+        "file": "chapter-01.md",
+        "title": "Урок 1. Рецепт против повара"
+      },
+      {
+        "file": "chapter-02.md",
+        "title": "Урок 2. Свой агент и его границы"
+      },
+      {
+        "file": "glossary.md",
+        "title": "Словарик темы"
+      }
+    ],
+    "05-provierka": [
+      {
+        "file": "book.md",
+        "title": "Тема 5: Проверка качества ИИ"
+      },
+      {
+        "file": "chapter-01.md",
+        "title": "Урок 1. Пять вопросов другу — не проверка"
+      },
+      {
+        "file": "chapter-02.md",
+        "title": "Урок 2. Когда ИИ проверяет ИИ"
+      },
+      {
+        "file": "glossary.md",
+        "title": "Словарик темы"
+      }
+    ],
+    "06-modeli-bezopasnost": [
+      {
+        "file": "book.md",
+        "title": "Тема 6: Модели и безопасность"
+      },
+      {
+        "file": "chapter-01.md",
+        "title": "Урок 1. Где живёт модель"
+      },
+      {
+        "file": "chapter-02.md",
+        "title": "Урок 2. Как ИИ обманывают"
+      },
+      {
+        "file": "glossary.md",
+        "title": "Словарик темы"
+      }
+    ],
+    "07-proyekt": [
+      {
+        "file": "book.md",
+        "title": "Тема 7: Свой проект"
+      },
+      {
+        "file": "chapter-01.md",
+        "title": "Урок 1. Собираем свой проект"
+      },
+      {
+        "file": "chapter-02.md",
+        "title": "Урок 2. Как о нём рассказать"
+      },
+      {
+        "file": "glossary.md",
+        "title": "Словарик темы"
+      }
+    ]
+  }
+}
