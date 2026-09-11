@@ -140,6 +140,28 @@ def check_labs():
                     break
 
 
+def check_notebooks():
+    """Каждый .ipynb-ноутбук упомянут в уроках и актуален относительно notebooks/*.py."""
+    notebooks = sorted(LABS.glob("*/*.ipynb"))
+    if not notebooks:
+        return 0
+
+    chapters = {p.read_text() for p in BOOKS.glob("*/chapter-*.md")}
+    for nb in notebooks:
+        relative = nb.relative_to(BOOKS).as_posix()
+        if not any(relative in text for text in chapters):
+            fail(f"{relative}: на ноутбук не ссылается ни один урок")
+
+    build = subprocess.run(
+        [sys.executable, str(ROOT / "scripts/build_notebooks.py"), "--check"],
+        capture_output=True, text=True,
+    )
+    if build.returncode != 0:
+        output = (build.stdout + build.stderr).strip()
+        fail(f"ноутбуки устарели относительно notebooks/*.py: {output[:300]}")
+    return len(notebooks)
+
+
 def main():
     manifest = check_manifest()
     for course, items in manifest.items():
@@ -151,6 +173,7 @@ def main():
     check_asset_version()
     check_reader_registration(manifest)
     check_labs()
+    notebooks = check_notebooks()
 
     chapters = len(list(BOOKS.glob("*/chapter-*.md")))
     diagrams = sum(p.read_text().count("```mermaid") for p in BOOKS.glob("*/*.md"))
@@ -162,8 +185,8 @@ def main():
             print(" -", problem)
         return 1
 
-    print(f"PASS: тем {len(manifest)}, уроков {chapters}, схем {diagrams}, лабораторных {labs}")
-    print("Проверены: структура, ссылки, палитра схем, версия ассетов, запуск лабораторных.")
+    print(f"PASS: тем {len(manifest)}, уроков {chapters}, схем {diagrams}, лабораторных {labs}, ноутбуков {notebooks}")
+    print("Проверены: структура, ссылки, палитра схем, версия ассетов, запуск лабораторных и ноутбуков.")
     return 0
 
 

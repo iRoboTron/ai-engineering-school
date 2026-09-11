@@ -70,6 +70,19 @@ mv -Tf "$docroot.next-$id" "$docroot"
 switched=1
 systemctl reload nginx
 
+# Старые релизы: держим последние 5, остальное убираем.
+#
+# Сортируем по ИМЕНИ (оно вида 20260911-062723, то есть само по себе дата), а не по
+# времени изменения: tar восстанавливает каталогам их прежние даты, поэтому свежий
+# релиз выглядит для `ls -t` самым старым — и однажды был удалён сразу после выкладки.
+# Плюс отдельно исключаем текущий релиз: то, на что смотрит docroot, не удаляем никогда.
+for old in $(ls -1d "/var/www/releases/$site"/*/ 2>/dev/null | sort -r | tail -n +6); do
+  case "$(basename "$old")" in
+    "$id") continue ;;
+    *) rm -rf -- "$old" ;;
+  esac
+done
+
 # Дымовые проверки: сайт должен реально отдавать ключевые файлы.
 # reload у nginx асинхронный — старые воркеры доживают запросы ещё пару секунд
 # и отдают 404 по старому docroot, поэтому каждый путь проверяем с повторами.
@@ -87,9 +100,7 @@ proverit() {
 
 for path in index.html reader.html reader-links.js files.json \
             vendor/marked.min.js 01-llm-osnovy/book.md \
-            labs/tema1-llm-osnovy/01_tokeny.py; do
+            labs/tema1-llm-osnovy/01_tokeny.py \
+            labs/tema1-llm-osnovy/01_tokeny.ipynb; do
   proverit "$path"
 done
-
-# Старые релизы: держим последние 5, остальное убираем.
-ls -1dt "/var/www/releases/$site"/*/ 2>/dev/null | tail -n +6 | xargs -r rm -rf --
