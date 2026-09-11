@@ -15,6 +15,7 @@
 # %%
 import getpass
 import os
+from pprint import pprint
 
 from openai import OpenAI
 
@@ -173,12 +174,17 @@ def sprosit_bota(vopros):
         return "В документах этого нет.", []
 
     dokumenty = "\n".join(f"- {chank}" for _, chank in naydennoe)
+    soobshcheniya = [
+        {"role": "system", "content": PRAVILO},
+        {"role": "user", "content": f"ДОКУМЕНТЫ:\n{dokumenty}\n\nВОПРОС: {vopros}"},
+    ]
+
+    print("Что мы отправляем модели:")
+    pprint(soobshcheniya, width=100, sort_dicts=False)
+
     otvet = client.chat.completions.create(
         model=MODEL,
-        messages=[
-            {"role": "system", "content": PRAVILO},
-            {"role": "user", "content": f"ДОКУМЕНТЫ:\n{dokumenty}\n\nВОПРОС: {vopros}"},
-        ],
+        messages=soobshcheniya,
         temperature=0,
         max_tokens=200,
     )

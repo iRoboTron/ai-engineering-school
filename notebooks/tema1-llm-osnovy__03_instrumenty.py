@@ -15,6 +15,7 @@
 import getpass
 import json
 import os
+from pprint import pprint
 
 from openai import OpenAI
 
@@ -44,15 +45,22 @@ print("Подключились. Модель:", MODEL)
 # %%
 OBJAVLENIE = "Кружок робототехники, вторник и четверг в 15:40, кабинет 204"
 
+zapros = [{"role": "user", "content":
+    f"Разбери объявление в JSON с полями nazvanie, dni, vremya, kabinet.\n\n{OBJAVLENIE}"}]
+
+print("Что мы отправляем модели:")
+pprint(zapros, width=100, sort_dicts=False)
+
 otvet = client.chat.completions.create(
     model=MODEL,
-    messages=[{"role": "user", "content":
-        f"Разбери объявление в JSON с полями nazvanie, dni, vremya, kabinet.\n\n{OBJAVLENIE}"}],
+    messages=zapros,
     temperature=0,
     max_tokens=250,
 )
 
 tekst = otvet.choices[0].message.content
+
+print("\nЧто нам ответило:")
 print(repr(tekst))     # repr показывает строку «как есть», со всеми служебными символами
 
 # %% [markdown]
@@ -107,9 +115,14 @@ SHEMA = {
     "additionalProperties": False,
 }
 
+zapros = [{"role": "user", "content": f"Разбери объявление.\n\n{OBJAVLENIE}"}]
+
+print("Что мы отправляем модели:")
+pprint(zapros, width=100, sort_dicts=False)
+
 otvet = client.chat.completions.create(
     model=MODEL,
-    messages=[{"role": "user", "content": f"Разбери объявление.\n\n{OBJAVLENIE}"}],
+    messages=zapros,
     response_format={"type": "json_schema",
                      "json_schema": {"name": "kruzhok", "strict": True, "schema": SHEMA}},
     temperature=0,
@@ -117,7 +130,7 @@ otvet = client.chat.completions.create(
 )
 
 tekst = otvet.choices[0].message.content
-print("Сырой ответ:", repr(tekst))
+print("\nСырой ответ:", repr(tekst))
 
 dannye = json.loads(tekst)          # теперь читается без всяких ухищрений
 print()
@@ -178,6 +191,9 @@ def uznat_pogodu(gorod):
 # %%
 istoriya = [{"role": "user", "content": "Какая сейчас погода в Москве?"}]
 
+print("Что мы отправляем модели (история разговора):")
+pprint(istoriya, width=100, sort_dicts=False)
+
 otvet = client.chat.completions.create(
     model=MODEL,
     messages=istoriya,
@@ -186,6 +202,7 @@ otvet = client.chat.completions.create(
     max_tokens=200,
 )
 
+print()
 soobshchenie = otvet.choices[0].message
 print("Текст ответа:   ", soobshchenie.content)
 print("Причина остановки:", otvet.choices[0].finish_reason)
@@ -240,6 +257,9 @@ if soobshchenie.tool_calls:
     })
 
     # 4. Спрашиваем модель снова — теперь ей есть на что опереться.
+    print("3) Полная история, которую мы отправляем модели на последнем шаге:")
+    pprint(istoriya, width=100, sort_dicts=False)
+    print()
     final = client.chat.completions.create(
         model=MODEL, messages=istoriya, tools=INSTRUMENTY_OPISANIE,
         temperature=0, max_tokens=200,

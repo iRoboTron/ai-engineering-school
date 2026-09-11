@@ -18,6 +18,7 @@
 import getpass
 import json
 import os
+from pprint import pprint
 
 from openai import OpenAI
 
@@ -136,6 +137,9 @@ def zapustit_agenta(zadacha, pokazyvat_shagi=True):
     byvshie_vyzovy = set()              # для границы 2: ловля повторов
 
     print(f"❓ {zadacha}")
+    print("\nЧто мы отправляем модели (начальная история):")
+    pprint(istoriya, width=100, sort_dicts=False)
+    print()
 
     # ГРАНИЦА 1: цикл физически не может идти дольше MAX_SHAGOV.
     for shag in range(1, MAX_SHAGOV + 1):

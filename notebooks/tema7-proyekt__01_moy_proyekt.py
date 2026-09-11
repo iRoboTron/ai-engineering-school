@@ -21,6 +21,7 @@
 import getpass
 import os
 import re
+from pprint import pprint
 
 from openai import OpenAI
 from rank_bm25 import BM25Okapi
@@ -133,20 +134,29 @@ def nayti(vopros):
     return [i for i in poryadok[:SKOLKO_CHANKOV] if ocenki[i] > 0]
 
 
-def otvetit(vopros):
+def otvetit(vopros, pokazyvat_zapros=False):
     nomera = nayti(vopros)
     if not nomera:
         return "В документах этого нет.", []
+
     dokumenty = "\n".join(f"- {chanki[i]}" for i in nomera)
+    zapros = [{"role": "system", "content": PRAVILO},
+              {"role": "user", "content": f"ДОКУМЕНТЫ:\n{dokumenty}\n\nВОПРОС: {vopros}"}]
+
+    # Когда бот отвечает не то, первым делом смотри не на ответ, а на запрос:
+    # чаще всего виноват поиск, подсунувший не тот кусок.
+    if pokazyvat_zapros:
+        print("Что уходит модели:")
+        pprint(zapros, width=100, sort_dicts=False)
+        print()
+
     otvet = client.chat.completions.create(
-        model=MODEL, temperature=0, max_tokens=200,
-        messages=[{"role": "system", "content": PRAVILO},
-                  {"role": "user", "content": f"ДОКУМЕНТЫ:\n{dokumenty}\n\nВОПРОС: {vopros}"}])
+        model=MODEL, temperature=0, max_tokens=200, messages=zapros)
     return (otvet.choices[0].message.content or "").strip(), nomera
 
 
-print("Бот готов. Проверим на одном вопросе:")
-otvet, istochniki = otvetit(MOI_ETALON[0]["vopros"])
+print("Бот готов. Проверим на одном вопросе и посмотрим запрос целиком:\n")
+otvet, istochniki = otvetit(MOI_ETALON[0]["vopros"], pokazyvat_zapros=True)
 print(f"  ❓ {MOI_ETALON[0]['vopros']}")
 print(f"  🤖 {otvet}")
 print(f"  📄 источник: чанк {istochniki}")

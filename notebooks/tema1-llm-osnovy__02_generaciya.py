@@ -35,6 +35,7 @@
 # %%
 import getpass
 import os
+from pprint import pprint
 
 from openai import OpenAI
 
@@ -64,17 +65,36 @@ print("Подключились. Модель:", MODEL)
 #   а столько, сколько нужно: за токены платят.
 
 # %%
+soobshcheniya = [
+    {"role": "system", "content": "Ты помощник для школьников. Отвечай коротко и просто."},
+    {"role": "user", "content": "Объясни в двух предложениях, что такое искусственный интеллект."},
+]
+
+print("ЧТО МЫ СПРАШИВАЕМ (уходит на сервер):")
+pprint(soobshcheniya, width=100, sort_dicts=False)
+
 otvet = client.chat.completions.create(
     model=MODEL,
-    messages=[
-        {"role": "system", "content": "Ты помощник для школьников. Отвечай коротко и просто."},
-        {"role": "user", "content": "Объясни в двух предложениях, что такое искусственный интеллект."},
-    ],
+    messages=soobshcheniya,
     temperature=0.7,
     max_tokens=200,
 )
 
-print(otvet.choices[0].message.content)
+print("\nЧТО ПРИШЛО ОТ МОДЕЛИ (полный ответ):")
+pprint(otvet.model_dump(), width=100, sort_dicts=False)
+
+# %% [markdown]
+# **Загляни в поле `model` в этом ответе.** Скорее всего, там написано **не то**, что мы
+# просили в переменной `MODEL`.
+#
+# Это не ошибка. Между тобой и моделью стоит школьный сервер, и если заказанная модель
+# сейчас занята или отвечает отказом, он молча берёт следующую из разрешённого списка —
+# чтобы урок не прервался на середине. Какая модель ответила на самом деле, всегда видно
+# в поле `model`.
+#
+# Запомни это как общее правило: **сверяй, что ты получил, а не только что заказал.**
+# В теме 5 мы увидим, к чему приводит привычка верить, что система работает так, как
+# задумано, без проверки.
 
 # %% [markdown]
 # Теперь заглянем внутрь ответа. Кроме текста там есть служебные данные — те самые
@@ -124,6 +144,7 @@ def sprosit(vopros, temperatura, max_tokens=60):
 
 VOPROS = "Придумай название для школьного кружка робототехники. Ответь только названием."
 
+print(f"Вопрос, который мы задаём шесть раз:\n  {VOPROS}\n")
 for temperatura in [0.0, 1.5]:
     print(f"=== температура {temperatura} ===")
     for popytka in range(1, 4):
@@ -159,6 +180,10 @@ vydumannaya_kniga = (
     "писателя Аркадия Мельникова, изданной в 1974 году."
 )
 
+print("Вопрос, который мы задаём модели:")
+pprint(vydumannaya_kniga, width=100)
+print()
+print("Ответ модели:")
 print(sprosit(vydumannaya_kniga, temperatura=0.7, max_tokens=250))
 
 # %% [markdown]
@@ -174,6 +199,7 @@ print(sprosit(vydumannaya_kniga, temperatura=0.7, max_tokens=250))
 otvet_1 = sprosit(vydumannaya_kniga, temperatura=0.7, max_tokens=200)
 otvet_2 = sprosit(vydumannaya_kniga, temperatura=0.7, max_tokens=200)
 
+print("Вопрос дважды:", repr(vydumannaya_kniga), "\n")
 print("ПЕРВЫЙ ОТВЕТ:\n", otvet_1, "\n")
 print("ВТОРОЙ ОТВЕТ:\n", otvet_2)
 
@@ -227,7 +253,9 @@ for nazvanie, messages in popytki.items():
     )
     tekst = (otvet.choices[0].message.content or "").strip()
     print(f"--- {nazvanie} ---")
-    print(tekst[:300], "\n")
+    print("Что мы отправили:")
+    pprint(messages, width=100, sort_dicts=False)
+    print("Что нам ответило:", tekst[:300], "\n")
 
 # %% [markdown]
 # **Скорее всего, не сработало ни разу.** Модель снова сочинила сюжет, а на прямой вопрос

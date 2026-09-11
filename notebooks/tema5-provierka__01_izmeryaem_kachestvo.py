@@ -15,6 +15,7 @@
 # %%
 import getpass
 import os
+from pprint import pprint
 
 import pandas as pd
 from openai import OpenAI
@@ -201,18 +202,33 @@ PRAVILO = (
 )
 
 
-def otvetit(vopros):
+def otvetit(vopros, pokazyvat_zapros=False):
     ocenki = poisk_obrezannyy.get_scores(v_slova_obrezannye(vopros))
     poryadok = sorted(range(len(CHANKI)), key=lambda i: ocenki[i], reverse=True)
     naydeno = [CHANKI[i] for i in poryadok[:2] if ocenki[i] > 0]
     if not naydeno:
         return "В документах этого нет."
+
     dokumenty = "\n".join(f"- {c}" for c in naydeno)
+    zapros = [{"role": "system", "content": PRAVILO},
+              {"role": "user", "content": f"ДОКУМЕНТЫ:\n{dokumenty}\n\nВОПРОС: {vopros}"}]
+
+    # Полезно хотя бы раз посмотреть, что именно уходит модели: ответ бывает
+    # неправильным не потому, что модель плоха, а потому что ей прислали не то.
+    if pokazyvat_zapros:
+        print("Что уходит модели:")
+        pprint(zapros, width=100, sort_dicts=False)
+        print()
+
     otvet = client.chat.completions.create(
-        model=MODEL, temperature=0, max_tokens=150,
-        messages=[{"role": "system", "content": PRAVILO},
-                  {"role": "user", "content": f"ДОКУМЕНТЫ:\n{dokumenty}\n\nВОПРОС: {vopros}"}])
+        model=MODEL, temperature=0, max_tokens=150, messages=zapros)
     return otvet.choices[0].message.content.strip()
+
+
+# Посмотрим на один запрос целиком — дальше будем печатать только ответы.
+print("Пример полного запроса:\n")
+primer = otvetit(ETALON[0]["vopros"], pokazyvat_zapros=True)
+print("Ответ модели:", primer)
 
 
 stroki = []
@@ -256,18 +272,27 @@ tablica
 # ДА или НЕТ. Чем уже вопрос, тем меньше судья фантазирует.
 
 # %%
-def sudya(vopros, otvet_bota, etalonnyy_fakt):
+def sudya(vopros, otvet_bota, etalonnyy_fakt, pokazyvat_zapros=False):
     """Совпадает ли ответ бота с эталонным фактом по СУТИ. Отвечает ДА или НЕТ."""
+    zapros = [
+        {"role": "system", "content":
+            "Ты строгий проверяющий. Отвечай ровно одним словом: ДА или НЕТ. "
+            "ДА — если ответ содержит указанный факт. НЕТ — если не содержит или противоречит."},
+        {"role": "user", "content":
+            f"ВОПРОС: {vopros}\nОТВЕТ БОТА: {otvet_bota}\nФАКТ, который должен быть: {etalonnyy_fakt}"},
+    ]
+    if pokazyvat_zapros:
+        print("Что видит судья:")
+        pprint(zapros, width=100, sort_dicts=False)
+        print()
+
     reshenie = client.chat.completions.create(
-        model=MODEL, temperature=0, max_tokens=10,
-        messages=[
-            {"role": "system", "content":
-                "Ты строгий проверяющий. Отвечай ровно одним словом: ДА или НЕТ. "
-                "ДА — если ответ содержит указанный факт. НЕТ — если не содержит или противоречит."},
-            {"role": "user", "content":
-                f"ВОПРОС: {vopros}\nОТВЕТ БОТА: {otvet_bota}\nФАКТ, который должен быть: {etalonnyy_fakt}"},
-        ])
+        model=MODEL, temperature=0, max_tokens=10, messages=zapros)
     return (reshenie.choices[0].message.content or "").strip().upper().startswith("ДА")
+
+
+# Один раз покажем целиком, что именно получает судья.
+sudya("Во сколько робототехника?", "Кружок начинается в 15:40.", "15:40", pokazyvat_zapros=True)
 
 
 # Проверим судью на заведомо известных случаях — в том числе на подставных.
