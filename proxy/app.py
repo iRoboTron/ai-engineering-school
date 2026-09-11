@@ -100,7 +100,7 @@ def _log(record):
 
 
 def _est_otvet(response):
-    """Есть ли в ответе непустой текст.
+    """Есть ли в ответе непустой текст или просьба вызвать инструмент.
 
     Некоторые модели «размышляют» и иногда возвращают пустое поле content.
     Для урока это то же самое, что отказ: ученик видит пустоту и не понимает, почему.
@@ -109,10 +109,14 @@ def _est_otvet(response):
     if not response.headers.get("content-type", "").startswith("application/json"):
         return False
     try:
-        vybory = response.json().get("choices") or []
-        return bool((vybory[0].get("message", {}).get("content") or "").strip())
+        soobshchenie = (response.json().get("choices") or [])[0].get("message", {})
     except (ValueError, IndexError, AttributeError):
         return False
+    # Ответ считается нормальным, если есть текст ЛИБО просьба вызвать инструмент:
+    # при вызове инструмента content пустой по определению, и это не ошибка.
+    if soobshchenie.get("tool_calls"):
+        return True
+    return bool((soobshchenie.get("content") or "").strip())
 
 
 def _check_token(authorization, x_class_token):
