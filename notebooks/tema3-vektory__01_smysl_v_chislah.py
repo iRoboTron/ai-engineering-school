@@ -28,13 +28,27 @@
 # приписывали спереди `passage: `, а вопросам — `query: `. Эти пометки нужно ставить
 # и нам, иначе качество заметно падает. Выглядит странно, но так устроена именно эта
 # модель — у других свои правила, их всегда пишут в описании.
+#
+# При первом запуске модель скачивается с сайта Hugging Face — около 470 МБ, это
+# занимает с минуту. Полоски загрузки нужны: по ним видно, что процесс идёт.
+# Регистрироваться на сайте и получать ключ не нужно — поэтому служебные
+# предупреждения о ключе мы ниже отключаем.
 
 # %%
+import logging
+import os
+import warnings
+
+# Без предупреждения «set a HF_TOKEN»: ключ для скачивания открытой модели не нужен.
+os.environ["HF_HUB_VERBOSITY"] = "error"
+logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
+warnings.filterwarnings("ignore", message=".*HF_TOKEN.*")
+
 from sentence_transformers import SentenceTransformer
 
 model = SentenceTransformer("intfloat/multilingual-e5-small")
 print("Модель загружена.")
-print("Длина эмбеддинга (сколько чисел на одну фразу):", model.get_sentence_embedding_dimension())
+print("Длина эмбеддинга (сколько чисел на одну фразу):", len(model.encode("проверка")))
 
 # %% [markdown]
 # ## Шаг 2. Смотрим на эмбеддинг своими глазами
