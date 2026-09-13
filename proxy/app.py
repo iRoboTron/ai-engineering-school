@@ -136,6 +136,55 @@ async def health():
     return {"status": "ok", "models": sorted(ALLOWED_MODELS), "default_model": DEFAULT_MODEL}
 
 
+# --- Витрина моделей (docs/books/models.html) ---
+# Каталог OpenRouter публичный, но из РФ браузер до него не достучится — поэтому
+# сервер забирает его сам, раз в час, и отдаёт только нужные странице поля.
+CATALOG_TTL = int(os.environ.get("AI9_CATALOG_TTL", "3600"))
+_catalog = {"data": None, "fetched_at": 0.0}
+_catalog_lock = asyncio.Lock()
+
+
+def _catalog_row(m):
+    pricing = m.get("pricing") or {}
+    arch = m.get("architecture") or {}
+    return {
+        "id": m.get("id"),
+        "name": m.get("name"),
+        "created": m.get("created"),
+        "context_length": m.get("context_length"),
+        "prompt": pricing.get("prompt"),
+        "completion": pricing.get("completion"),
+        "params": m.get("supported_parameters") or [],
+        "input": arch.get("input_modalities") or [],
+        "output": arch.get("output_modalities") or [],
+        "expiration_date": m.get("expiration_date"),
+    }
+
+
+@app.get("/api/catalog")
+async def catalog():
+    async with _catalog_lock:
+        stale = False
+        if _catalog["data"] is None or time.time() - _catalog["fetched_at"] > CATALOG_TTL:
+            try:
+                async with httpx.AsyncClient(timeout=30) as client:
+                    r = await client.get(f"{UPSTREAM}/models")
+                    r.raise_for_status()
+                    _catalog["data"] = [_catalog_row(m) for m in r.json()["data"]]
+                    _catalog["fetched_at"] = time.time()
+            except (httpx.HTTPError, KeyError, ValueError):
+                if _catalog["data"] is None:
+                    raise HTTPException(502, "OpenRouter не отдал каталог моделей, попробуй позже")
+                stale = True   # отдаём прошлый удачный каталог, но честно помечаем
+    return {
+        "fetched_at": _catalog["fetched_at"],
+        "stale": stale,
+        "allowed": sorted(ALLOWED_MODELS),
+        "default_model": DEFAULT_MODEL,
+        "models": _catalog["data"],
+    }
+
+
 @app.get("/api/v1/models")
 async def models(authorization: str = Header(None), x_class_token: str = Header(None)):
     _check_token(authorization, x_class_token)

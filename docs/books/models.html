@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Витрина моделей OpenRouter</title>
+<style>
+:root {
+    --bg: #f6f8fa; --panel: #fff; --text: #1f2328; --muted: #656d76; --line: #d0d7de;
+    --accent: #0969da; --good: #1a7f37; --warn: #9a6700; --bad: #cf222e; --chip: #eaeef2;
+    --grid: #e6e9ec; --hover: #f3f6f9; --hl: #fff8c5;
+}
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #0d1117; --panel: #161b22; --text: #e6edf3; --muted: #8d96a0; --line: #30363d;
+        --accent: #4493f8; --good: #3fb950; --warn: #d29922; --bad: #f85149; --chip: #21262d;
+        --grid: #21262d; --hover: #1c2129; --hl: #3b2e00;
+    }
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+a { color: var(--accent); }
+.page { width: min(1440px, calc(100% - 32px)); margin: 0 auto; padding: 24px 0 140px; }
+h1 { font-size: 24px; }
+h2 { font-size: 16px; margin-bottom: 10px; }
+.muted { color: var(--muted); }
+.topbar { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; align-items: center; padding-bottom: 14px; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
+.status { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pill { background: var(--chip); border-radius: 999px; padding: 3px 10px; font-size: 13px; white-space: nowrap; }
+.pill.stale { background: var(--bad); color: #fff; }
+button, .btn { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
+aside.card { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow: auto; }
+@media (max-width: 900px) { aside.card { position: static; max-height: none; } }
+aside summary { font-weight: 600; cursor: pointer; }
+.field { margin-top: 14px; }
+.field > label, .field > .label { display: block; font-weight: 600; margin-bottom: 4px; }
+.field input[type=range] { width: 100%; }
+.field input[type=number], .field input[type=text], .field select { width: 100%; font: inherit; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); }
+.checks { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.checks label { font-weight: 400; display: flex; gap: 4px; align-items: center; }
+.calc { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.calc label { font-size: 12px; color: var(--muted); }
+.best { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; margin-bottom: 18px; }
+.best .card { cursor: pointer; }
+.best .card:hover { border-color: var(--accent); }
+.best .name { font-weight: 600; margin-bottom: 4px; overflow-wrap: anywhere; }
+.best .price { font-size: 20px; font-weight: 700; }
+.badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.badge { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: var(--chip); white-space: nowrap; }
+.badge.on { background: var(--good); color: #fff; }
+.badge.proxy { background: var(--accent); color: #fff; }
+.badge.warn { background: var(--warn); color: #fff; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.tabs button { border-radius: 999px; }
+.tabs button.active { background: var(--text); color: var(--panel); border-color: var(--text); }
+.tabs .count { opacity: .7; margin-left: 4px; }
+.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 14px; margin-bottom: 18px; }
+@media (max-width: 520px) { .charts { grid-template-columns: minmax(0, 1fr); } }
+.chart-wide { grid-column: 1 / -1; }
+svg { display: block; width: 100%; height: auto; }
+svg text { fill: var(--muted); font-size: 11px; }
+svg .gridline { stroke: var(--grid); }
+svg .dot { cursor: pointer; stroke: var(--panel); stroke-width: 1; }
+svg .dot.proxy { stroke: var(--text); stroke-width: 2.5; }
+svg .dot:hover { stroke: var(--accent); stroke-width: 3; }
+svg .bar-label { fill: var(--text); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
+#tip { position: fixed; pointer-events: none; background: var(--text); color: var(--panel); padding: 6px 8px; border-radius: 6px; font-size: 12px; z-index: 20; max-width: 280px; }
+.table-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.table-head input { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); width: min(320px, 100%); }
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+th { position: sticky; top: 0; background: var(--panel); cursor: pointer; user-select: none; }
+th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
+tr:hover td { background: var(--hover); }
+tr.hl td { background: var(--hl); }
+td.model { white-space: normal; min-width: 220px; }
+td.model small { display: block; color: var(--muted); }
+.candidates { position: fixed; left: 0; right: 0; bottom: 0; background: var(--panel); border-top: 1px solid var(--line); box-shadow: 0 -4px 16px rgba(0,0,0,.08); z-index: 10; }
+.candidates .inner { width: min(1440px, calc(100% - 32px)); margin: 0 auto; padding: 10px 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.candidates code { background: var(--chip); padding: 4px 8px; border-radius: 6px; overflow-wrap: anywhere; font-size: 12px; flex: 1 1 320px; }
+.chip { background: var(--chip); border-radius: 999px; padding: 2px 4px 2px 10px; font-size: 12px; display: inline-flex; gap: 4px; align-items: center; }
+.chip button { border: 0; background: none; padding: 0 6px; }
+.warnings { width: 100%; font-size: 12px; color: var(--warn); }
+.empty { padding: 30px; text-align: center; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="page">
+    <div class="topbar">
+        <div>
+            <h1>Витрина моделей OpenRouter</h1>
+            <div class="muted">Что сейчас есть дешёвого и сильного — чтобы при необходимости переключить прокси курса.</div>
+        </div>
+        <div class="status" id="status"><span class="pill">Загружаю каталог…</span></div>
+    </div>
+
+    <div class="layout">
+        <aside class="card">
+            <details id="settingsBox" open>
+                <summary>Настройки</summary>
+
+                <div class="field">
+                    <label for="maxPrice">Цена до <span id="maxPriceOut"></span> за 1 млн токенов</label>
+                    <input type="range" id="maxPrice" min="0" max="100" step="1">
+                    <div class="muted" style="font-size:12px">«Смешанная» цена: 3 части входа + 1 часть выхода — как в типичном запросе урока.</div>
+                </div>
+
+                <div class="field">
+                    <label for="minCtx">Контекст не меньше</label>
+                    <select id="minCtx">
+                        <option value="0">любой</option>
+                        <option value="8000">8 тыс. токенов</option>
+                        <option value="32000">32 тыс.</option>
+                        <option value="128000">128 тыс.</option>
+                        <option value="1000000">1 млн</option>
+                    </select>
+                </div>
+
+                <div class="field">
+                    <span class="label">Обязательно умеет</span>
+                    <div class="checks">
+                        <label><input type="checkbox" data-need="tools"> инструменты</label>
+                        <label><input type="checkbox" data-need="json"> JSON-ответ</label>
+                        <label><input type="checkbox" data-need="reasoning"> рассуждения</label>
+                        <label><input type="checkbox" data-need="text"> только текст</label>
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label for="maxAge">Не старше, дней (0 — без ограничения)</label>
+                    <input type="number" id="maxAge" min="0" step="30">
+                </div>
+
+                <div class="field">
+                    <span class="label">Бесплатные</span>
+                    <div class="checks">
+                        <label><input type="checkbox" id="hideFree"> скрыть</label>
+                        <label><input type="checkbox" id="onlyFree"> только они</label>
+                    </div>
+                </div>
+
+                <div class="field">
+                    <span class="label">Калькулятор урока</span>
+                    <div class="calc">
+                        <div><label for="students">учеников</label><input type="number" id="students" min="1"></div>
+                        <div><label for="requests">запросов на ученика</label><input type="number" id="requests" min="1"></div>
+                        <div><label for="tokIn">токенов входа</label><input type="number" id="tokIn" min="0" step="100"></div>
+                        <div><label for="tokOut">токенов выхода</label><input type="number" id="tokOut" min="0" step="50"></div>
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label for="vendors">Известные разработчики</label>
+                    <input type="text" id="vendors">
+                    <div class="muted" style="font-size:12px">Префиксы id через запятую. Косвенный признак популярности: в API нет рейтинга.</div>
+                </div>
+
+                <div class="field"><button id="reset" type="button">Сбросить настройки</button></div>
+            </details>
+        </aside>
+
+        <main>
+            <h2>Лучший выбор сейчас</h2>
+            <div class="muted" style="margin:-6px 0 10px;font-size:12px" id="scoreHint"></div>
+            <div class="best" id="best"></div>
+
+            <div class="tabs" id="tabs"></div>
+
+            <div class="charts">
+                <div class="card chart-wide">
+                    <h2>Цена × дата выхода</h2>
+                    <div class="muted" style="font-size:12px">Правый нижний угол — новые и дешёвые. Обведены модели, которые сейчас в прокси. Клик — строка в таблице.</div>
+                    <div id="chartDate"></div>
+                    <div class="legend" id="legend"></div>
+                </div>
+                <div class="card">
+                    <h2>Цена × размер контекста</h2>
+                    <div class="muted" style="font-size:12px">Правый нижний угол — дешёвые с большим окном.</div>
+                    <div id="chartCtx"></div>
+                </div>
+                <div class="card">
+                    <h2>Стоимость урока</h2>
+                    <div class="muted" style="font-size:12px" id="lessonHint"></div>
+                    <div id="chartLesson"></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="table-head">
+                    <h2 style="margin:0">Модели <span class="muted" id="tableCount"></span></h2>
+                    <input type="search" id="search" placeholder="Поиск по названию или id">
+                </div>
+                <div class="table-wrap"><table id="table"></table></div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<div class="candidates" id="candidates" hidden>
+    <div class="inner">
+        <strong>Кандидаты:</strong>
+        <span id="candChips"></span>
+        <code id="candEnv"></code>
+        <button class="primary" id="copyEnv" type="button">Скопировать</button>
+        <button id="clearCand" type="button">Очистить</button>
+        <div class="warnings" id="candWarn"></div>
+        <div class="muted" style="width:100%;font-size:12px">Вставь строку в <code>/etc/ai9-proxy.env</code> на CT 109 и выполни <code>./scripts/setup-proxy.sh</code>. Ноутбуки тем 1, 4 и 8 требуют инструменты и JSON-ответ.</div>
+    </div>
+</div>
+
+<div id="tip" hidden></div>
+
+<script>
+'use strict';
+
+const API = new URLSearchParams(location.search).get('src') || '/api/catalog';
+const STORE = 'ai9-models-v1';
+const DAY = 864e5;
+
+const DEFAULTS = {
+    maxPrice: 100,           // позиция слайдера; 100 = без ограничения
+    minCtx: 0,
+    need: [],
+    maxAge: 0,
+    hideFree: false,
+    onlyFree: false,
+    students: 30, requests: 40, tokIn: 1500, tokOut: 300,
+    vendors: 'openai, anthropic, google, meta-llama, mistralai, qwen, deepseek, x-ai, moonshotai, z-ai, minimax',
+    tab: 'course',
+    sort: { key: 'score', dir: -1 },
+    candidates: [],
+};
+
+let settings = load();
+let catalog = null;       // ответ сервера
+let rows = [];            // посчитанные модели
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function load() {
+    try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(STORE) || '{}') }; }
+    catch { return { ...DEFAULTS }; }
+}
+function save() {
+    try { localStorage.setItem(STORE, JSON.stringify(settings)); } catch { /* приватное окно */ }
+}
+
+// Слайдер цены логарифмический: 0 → $0.01, 99 → ~$30, 100 → без ограничения.
+const sliderToPrice = v => v >= 100 ? Infinity : 0.01 * Math.pow(10, v * 3.5 / 99);
+const money = v => v === 0 ? 'бесплатно' : v < 0.01 ? '$' + v.toFixed(4) : v < 1 ? '$' + v.toFixed(3) : '$' + v.toFixed(2);
+const ctxText = n => n >= 1e6 ? (n / 1e6).toFixed(n % 1e6 ? 1 : 0) + ' млн' : Math.round(n / 1000) + ' тыс.';
+
+// ---------- Расчёты ----------
+
+function vendorsList() {
+    return settings.vendors.split(',').map(s => s.trim()).filter(Boolean);
+}
+
+function enrich(m, now, allowed, vendors) {
+    const pin = parseFloat(m.prompt) * 1e6;
+    const pout = parseFloat(m.completion) * 1e6;
+    if (!(pin >= 0) || !(pout >= 0)) return null;     // роутеры с плавающей ценой (-1) и мусор
+    const p = new Set(m.params);
+    const vendor = m.id.split('/')[0].replace(/^~/, '');
+    const r = {
+        id: m.id, name: m.name || m.id, vendor,
+        created: (m.created || 0) * 1000,
+        ageDays: m.created ? (now - m.created * 1000) / DAY : 9999,
+        ctx: m.context_length || 0,
+        pin, pout,
+        blended: (3 * pin + pout) / 4,
+        free: pin === 0 && pout === 0,
+        tools: p.has('tools'),
+        json: p.has('response_format') || p.has('structured_outputs'),
+        reasoning: p.has('reasoning'),
+        temperature: p.has('temperature'),
+        textOnly: m.input.length === 1 && m.input[0] === 'text' && m.output.length === 1 && m.output[0] === 'text',
+        textIO: m.input.includes('text') && m.output.includes('text'),
+        inProxy: allowed.includes(m.id),
+        known: vendors.includes(vendor),
+        expires: m.expiration_date ? Date.parse(m.expiration_date) : null,
+    };
+    r.suitable = r.textIO && r.temperature && r.tools && r.json && r.ctx >= 32000;
+    r.lesson = settings.students * settings.requests * (settings.tokIn * pin + settings.tokOut * pout) / 1e6;
+    // Балл «сильная и недорогая». Все веса на виду — см. подсказку над карточками.
+    const quality = 1 + (r.known ? 1 : 0)
+        + Math.min(1, Math.max(0, Math.log2(r.ctx / 32000) / 5))
+        + Math.max(0, 1 - r.ageDays / 365)
+        + (r.reasoning ? 0.5 : 0);
+    r.score = r.suitable && !r.free ? quality / Math.log10(r.blended * 100 + 10) : -1;
+    return r;
+}
+
+function recompute() {
+    const now = Date.now();
+    const vendors = vendorsList();
+    rows = catalog.models.map(m => enrich(m, now, catalog.allowed, vendors)).filter(Boolean);
+}
+
+const TABS = [
+    { id: 'proxy', title: 'Сейчас в прокси', test: r => r.inProxy, noFilters: true },
+    { id: 'course', title: 'Для курса', test: r => r.suitable && !r.free },
+    { id: 'cheap', title: 'Дешёвые сильные', test: r => r.suitable && !r.free && r.known && r.blended <= 0.5 },
+    { id: 'new', title: 'Новые (60 дней)', test: r => r.ageDays <= 60 },
+    { id: 'reasoning', title: 'Рассуждающие', test: r => r.reasoning },
+    { id: 'free', title: 'Бесплатные', test: r => r.free },
+    { id: 'all', title: 'Все', test: () => true },
+];
+
+function passesFilters(r) {
+    const maxPrice = sliderToPrice(settings.maxPrice);
+    if (r.blended > maxPrice) return false;
+    if (r.ctx < settings.minCtx) return false;
+    for (const need of settings.need) {
+        if (need === 'text' ? !r.textOnly : !r[need]) return false;
+    }
+    if (settings.maxAge > 0 && r.ageDays > settings.maxAge) return false;
+    if (settings.hideFree && r.free) return false;
+    if (settings.onlyFree && !r.free) return false;
+    return true;
+}
+
+function visibleRows(tabId = settings.tab) {
+    const tab = TABS.find(t => t.id === tabId) || TABS[1];
+    return rows.filter(r => tab.test(r) && (tab.noFilters || passesFilters(r)));
+}
+
+// ---------- Отрисовка ----------
+
+const PALETTE = ['#0969da', '#1a7f37', '#bc4c00', '#8250df', '#cf222e', '#1b7c83', '#9a6700', '#bf3989', '#57606a', '#0550ae', '#6639ba', '#953800'];
+function vendorColor(vendor) {
+    const i = vendorsList().indexOf(vendor);
+    return i >= 0 ? PALETTE[i % PALETTE.length] : '#8c959f';
+}
+
+function renderStatus() {
+    const mins = Math.round((Date.now() / 1000 - catalog.fetched_at) / 60);
+    $('status').innerHTML = [
+        catalog.stale ? '<span class="pill stale">OpenRouter не ответил — данные устарели</span>' : '',
+        `<span class="pill">обновлено ${mins < 1 ? 'только что' : mins + ' мин назад'}</span>`,
+        `<span class="pill">${rows.length} моделей</span>`,
+        `<span class="pill">в прокси: ${catalog.allowed.length}, по умолчанию ${esc(catalog.default_model)}</span>`,
+        '<button id="refresh" type="button">Обновить</button>',
+    ].join('');
+    $('refresh').onclick = start;
+}
+
+function badges(r) {
+    return [
+        r.inProxy ? '<span class="badge proxy">в прокси</span>' : '',
+        `<span class="badge ${r.tools ? 'on' : ''}">инструменты</span>`,
+        `<span class="badge ${r.json ? 'on' : ''}">JSON</span>`,
+        r.reasoning ? '<span class="badge on">рассуждения</span>' : '',
+        r.free ? '<span class="badge warn">бесплатная</span>' : '',
+        r.expires ? `<span class="badge warn">уходит ${new Date(r.expires).toLocaleDateString('ru')}</span>` : '',
+    ].join('');
+}
+
+function renderBest() {
+    // Без псевдонимов «~…-latest» и пакетных «:batch» (они не для живого диалога),
+    // и не больше одной модели от разработчика — иначе топ забивают версии одной модели.
+    const seen = new Set();
+    const best = rows.filter(r => r.score > 0 && passesFilters(r) && !r.id.startsWith('~') && !r.id.includes(':batch'))
+        .sort((a, b) => b.score - a.score)
+        .filter(r => !seen.has(r.vendor) && seen.add(r.vendor))
+        .slice(0, 5);
+    $('scoreHint').textContent = 'Балл = (1 + известный разработчик + размер окна до 1 + свежесть до 1 + рассуждения 0,5) ÷ log₁₀(цена×100 + 10). Только модели, пригодные для курса: текст, температура, инструменты, JSON, окно от 32 тыс. Не больше одной от разработчика.';
+    $('best').innerHTML = best.length ? best.map(r => `
+        <div class="card" data-id="${esc(r.id)}">
+            <div class="name">${esc(r.name)}</div>
+            <div class="price">${money(r.blended)}<span class="muted" style="font-size:12px;font-weight:400"> / 1 млн</span></div>
+            <div class="muted">урок: ${money(r.lesson)} · окно ${ctxText(r.ctx)}</div>
+            <div class="badges">${badges(r)}</div>
+        </div>`).join('') : '<div class="empty">Под настройки ничего не подходит — ослабь фильтры.</div>';
+    $('best').querySelectorAll('[data-id]').forEach(el => el.onclick = () => focusRow(el.dataset.id));
+}
+
+function renderTabs() {
+    $('tabs').innerHTML = TABS.map(t => `<button type="button" data-tab="${t.id}" class="${t.id === settings.tab ? 'active' : ''}">${t.title}<span class="count">${visibleRows(t.id).length}</span></button>`).join('');
+    $('tabs').querySelectorAll('button').forEach(b => b.onclick = () => { settings.tab = b.dataset.tab; save(); render(); });
+}
+
+// Точечный график на SVG. xType: 'time' или 'log'; y всегда логарифмическая цена.
+function scatter(el, data, xOf, xType, xLabel) {
+    // Ширина берётся из контейнера, чтобы подписи оставались читаемыми и на телефоне.
+    const W = Math.max(300, el.clientWidth || 900), H = Math.round(Math.min(340, Math.max(220, W * 0.55))), L = 64, R = 16, T = 12, B = 42;
+    const FREE_Y = 0.001;                            // бесплатные рисуем на отдельной нижней линии
+    const yOf = r => Math.max(r.blended, FREE_Y);
+    const pts = data.filter(r => xOf(r) > 0);
+    if (!pts.length) { el.innerHTML = '<div class="empty">Нет моделей для графика</div>'; return; }
+    const xs = pts.map(xOf), ys = pts.map(yOf);
+    const tx = v => xType === 'log' ? Math.log10(v) : v;
+    let x0 = tx(Math.min(...xs)), x1 = tx(Math.max(...xs));
+    if (x1 === x0) { x0 -= 1; x1 += 1; }
+    const y0 = Math.log10(FREE_Y) - 0.2, y1 = Math.log10(Math.max(...ys, 1)) + 0.2;
+    const sx = v => L + (tx(v) - x0) / (x1 - x0) * (W - L - R);
+    const sy = v => T + (1 - (Math.log10(v) - y0) / (y1 - y0)) * (H - T - B);
+
+    let g = '';
+    for (let e = Math.ceil(y0); e <= Math.floor(y1); e++) {
+        const v = Math.pow(10, e), y = sy(v);
+        g += `<line class="gridline" x1="${L}" x2="${W - R}" y1="${y}" y2="${y}"/><text x="${L - 6}" y="${y + 4}" text-anchor="end">${v === FREE_Y ? 'бесплатно' : money(v)}</text>`;
+    }
+    if (xType === 'time') {
+        const d0 = new Date(Math.min(...xs)), d1 = new Date(Math.max(...xs));
+        const months = (d1.getFullYear() - d0.getFullYear()) * 12 + d1.getMonth() - d0.getMonth();
+        const step = Math.max(1, Math.ceil(months / Math.max(2, Math.floor((W - L - R) / 75))));   // подписи не налезают друг на друга
+        for (let d = new Date(d0.getFullYear(), d0.getMonth() + 1, 1); d <= d1; d.setMonth(d.getMonth() + step)) {
+            const x = sx(+d);
+            g += `<line class="gridline" x1="${x}" x2="${x}" y1="${T}" y2="${H - B}"/><text x="${x}" y="${H - B + 16}" text-anchor="middle">${d.toLocaleDateString('ru', { month: 'short', year: '2-digit' })}</text>`;
+        }
+    } else {
+        for (let e = Math.ceil(x0); e <= Math.floor(x1); e++) {
+            const v = Math.pow(10, e), x = sx(v);
+            g += `<line class="gridline" x1="${x}" x2="${x}" y1="${T}" y2="${H - B}"/><text x="${x}" y="${H - B + 16}" text-anchor="middle">${ctxText(v)}</text>`;
+        }
+    }
+    g += `<text x="${(L + W - R) / 2}" y="${H - 6}" text-anchor="middle">${xLabel}</text>`;
+    g += `<text transform="translate(12 ${(T + H - B) / 2}) rotate(-90)" text-anchor="middle">цена за 1 млн токенов</text>`;
+
+    // Модели прокси рисуем последними, чтобы их не закрыли соседи.
+    const ordered = [...pts].sort((a, b) => a.inProxy - b.inProxy);
+    for (const r of ordered) {
+        g += `<circle class="dot ${r.inProxy ? 'proxy' : ''}" data-id="${esc(r.id)}" cx="${sx(xOf(r)).toFixed(1)}" cy="${sy(yOf(r)).toFixed(1)}" r="${r.known ? 5 : 3.5}" fill="${vendorColor(r.vendor)}" fill-opacity="${r.known ? 0.9 : 0.55}"/>`;
+    }
+    el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img">${g}</svg>`;
+    bindDots(el);
+}
+
+function lessonBars(el, data) {
+    const cheap = data.filter(r => !r.free).sort((a, b) => a.lesson - b.lesson).slice(0, 15);
+    const extra = rows.filter(r => r.inProxy && !cheap.includes(r));
+    const list = [...cheap, ...extra].sort((a, b) => a.lesson - b.lesson);
+    $('lessonHint').textContent = `${settings.students} учеников × ${settings.requests} запросов × (${settings.tokIn} вход + ${settings.tokOut} выход). 15 самых дешёвых из вкладки + модели прокси.`;
+    if (!list.length) { el.innerHTML = '<div class="empty">Нет платных моделей во вкладке</div>'; return; }
+    const W = Math.max(300, el.clientWidth || 520), row = 22, L = Math.min(190, Math.round(W * 0.42)), R = 60, H = list.length * row + 8;
+    const maxChars = Math.floor(L / 6.2);
+    const max = Math.max(...list.map(r => r.lesson)) || 1;
+    let g = '';
+    list.forEach((r, i) => {
+        const y = 4 + i * row, w = Math.max(2, (W - L - R) * r.lesson / max);
+        const label = r.name.length > maxChars ? r.name.slice(0, maxChars - 1) + '…' : r.name;
+        g += `<text class="bar-label" x="${L - 6}" y="${y + 14}" text-anchor="end">${esc(label)}</text>`;
+        g += `<rect class="dot ${r.inProxy ? 'proxy' : ''}" data-id="${esc(r.id)}" x="${L}" y="${y + 3}" width="${w.toFixed(1)}" height="${row - 8}" rx="3" fill="${r.inProxy ? 'var(--accent)' : vendorColor(r.vendor)}"/>`;
+        g += `<text x="${L + w + 6}" y="${y + 14}">${money(r.lesson)}</text>`;
+    });
+    el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img">${g}</svg>`;
+    bindDots(el);
+}
+
+function bindDots(el) {
+    const tip = $('tip');
+    el.querySelectorAll('[data-id]').forEach(dot => {
+        const r = rows.find(x => x.id === dot.dataset.id);
+        dot.onmousemove = e => {
+            tip.hidden = false;
+            tip.innerHTML = `<b>${esc(r.name)}</b><br>вход ${money(r.pin)} · выход ${money(r.pout)} за 1 млн<br>окно ${ctxText(r.ctx)} · ${new Date(r.created).toLocaleDateString('ru')}<br>урок ${money(r.lesson)}${r.inProxy ? '<br>сейчас в прокси' : ''}`;
+            tip.style.left = Math.min(e.clientX + 12, innerWidth - 290) + 'px';
+            tip.style.top = (e.clientY + 12) + 'px';
+        };
+        dot.onmouseleave = () => { tip.hidden = true; };
+        dot.onclick = () => focusRow(r.id);
+    });
+}
+
+function renderLegend() {
+    $('legend').innerHTML = vendorsList().map(v => `<span><i style="background:${vendorColor(v)}"></i>${esc(v)}</span>`).join('')
+        + '<span><i style="background:#8c959f"></i>остальные</span><span><i style="border:2px solid var(--text)"></i>в прокси</span>';
+}
+
+const COLUMNS = [
+    { key: 'cand', title: '', sort: false },
+    { key: 'name', title: 'Модель' },
+    { key: 'vendor', title: 'Разработчик' },
+    { key: 'created', title: 'Вышла', num: true },
+    { key: 'ctx', title: 'Окно', num: true },
+    { key: 'pin', title: 'Вход, 1М', num: true },
+    { key: 'pout', title: 'Выход, 1М', num: true },
+    { key: 'lesson', title: 'Урок', num: true },
+    { key: 'score', title: 'Балл', num: true },
+    { key: 'caps', title: 'Возможности', sort: false },
+];
+
+function renderTable(data) {
+    const q = $('search').value.trim().toLowerCase();
+    let list = q ? data.filter(r => r.id.toLowerCase().includes(q) || r.name.toLowerCase().includes(q)) : data;
+    const { key, dir } = settings.sort;
+    list = [...list].sort((a, b) => (a[key] > b[key] ? 1 : a[key] < b[key] ? -1 : 0) * dir);
+    $('tableCount').textContent = `(${list.length})`;
+    const head = '<tr>' + COLUMNS.map(c => `<th class="${c.num ? 'num' : ''}" data-key="${c.sort === false ? '' : c.key}">${c.title}${key === c.key ? (dir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('') + '</tr>';
+    const body = list.map(r => `
+        <tr id="row-${esc(r.id)}">
+            <td><input type="checkbox" data-cand="${esc(r.id)}" ${settings.candidates.includes(r.id) ? 'checked' : ''} title="в кандидаты"></td>
+            <td class="model">${esc(r.name)}<small>${esc(r.id)}</small></td>
+            <td>${esc(r.vendor)}</td>
+            <td class="num">${r.created ? new Date(r.created).toLocaleDateString('ru') : '—'}</td>
+            <td class="num">${ctxText(r.ctx)}</td>
+            <td class="num">${money(r.pin)}</td>
+            <td class="num">${money(r.pout)}</td>
+            <td class="num">${money(r.lesson)}</td>
+            <td class="num">${r.score > 0 ? r.score.toFixed(2) : '—'}</td>
+            <td><div class="badges" style="margin:0">${badges(r)}</div></td>
+        </tr>`).join('');
+    $('table').innerHTML = `<thead>${head}</thead><tbody>${body || `<tr><td colspan="${COLUMNS.length}" class="empty">Ничего не найдено</td></tr>`}</tbody>`;
+    $('table').querySelectorAll('th[data-key]').forEach(th => th.onclick = () => {
+        const k = th.dataset.key;
+        if (!k) return;
+        settings.sort = { key: k, dir: settings.sort.key === k ? -settings.sort.dir : (['name', 'vendor'].includes(k) ? 1 : -1) };
+        save(); renderTable(visibleRows());
+    });
+    $('table').querySelectorAll('[data-cand]').forEach(cb => cb.onchange = () => {
+        const id = cb.dataset.cand;
+        settings.candidates = cb.checked ? [...settings.candidates, id] : settings.candidates.filter(x => x !== id);
+        save(); renderCandidates();
+    });
+}
+
+function focusRow(id) {
+    let row = document.getElementById('row-' + id);
+    if (!row) {                          // модель скрыта текущей вкладкой — показываем все
+        settings.tab = 'all'; $('search').value = ''; save(); render();
+        row = document.getElementById('row-' + id);
+    }
+    if (!row) return;
+    document.querySelectorAll('tr.hl').forEach(t => t.classList.remove('hl'));
+    row.classList.add('hl');
+    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function renderCandidates() {
+    const ids = settings.candidates;
+    $('candidates').hidden = !ids.length;
+    if (!ids.length) return;
+    $('candChips').innerHTML = ids.map(id => `<span class="chip">${esc(id)}<button type="button" data-remove="${esc(id)}" title="убрать">×</button></span>`).join(' ');
+    $('candEnv').textContent = 'AI9_MODELS=' + ids.join(',');
+    const warn = [];
+    for (const id of ids) {
+        const r = rows.find(x => x.id === id);
+        if (!r) { warn.push(`${id}: пропала из каталога OpenRouter`); continue; }
+        if (!r.tools || !r.json) warn.push(`${id}: нет ${!r.tools ? 'инструментов' : ''}${!r.tools && !r.json ? ' и ' : ''}${!r.json ? 'JSON-ответа' : ''} — сломаются ноутбуки тем 1, 4, 8`);
+        if (r.free) warn.push(`${id}: бесплатная — на уроке упрётся в лимиты OpenRouter`);
+        if (r.expires) warn.push(`${id}: OpenRouter уберёт её ${new Date(r.expires).toLocaleDateString('ru')}`);
+    }
+    $('candWarn').textContent = warn.join(' · ');
+    $('candChips').querySelectorAll('[data-remove]').forEach(b => b.onclick = () => {
+        settings.candidates = settings.candidates.filter(x => x !== b.dataset.remove);
+        save(); renderCandidates(); renderTable(visibleRows());
+    });
+}
+
+function render() {
+    const data = visibleRows();
+    renderStatus();
+    renderBest();
+    renderTabs();
+    scatter($('chartDate'), data, r => r.created, 'time', 'дата появления на OpenRouter');
+    scatter($('chartCtx'), data, r => r.ctx, 'log', 'контекстное окно, токенов');
+    lessonBars($('chartLesson'), data);
+    renderLegend();
+    renderTable(data);
+    renderCandidates();
+}
+
+// ---------- Настройки ----------
+
+function syncInputs() {
+    $('maxPrice').value = settings.maxPrice;
+    $('maxPriceOut').textContent = settings.maxPrice >= 100 ? 'любой' : money(sliderToPrice(settings.maxPrice));
+    $('minCtx').value = settings.minCtx;
+    document.querySelectorAll('[data-need]').forEach(cb => cb.checked = settings.need.includes(cb.dataset.need));
+    $('maxAge').value = settings.maxAge;
+    $('hideFree').checked = settings.hideFree;
+    $('onlyFree').checked = settings.onlyFree;
+    for (const k of ['students', 'requests', 'tokIn', 'tokOut']) $(k).value = settings[k];
+    $('vendors').value = settings.vendors;
+}
+
+function onSettingsChange(recalc) {
+    save();
+    syncInputs();
+    if (!catalog) return;
+    if (recalc) recompute();
+    render();
+}
+
+$('maxPrice').oninput = e => { settings.maxPrice = +e.target.value; onSettingsChange(false); };
+$('minCtx').onchange = e => { settings.minCtx = +e.target.value; onSettingsChange(false); };
+document.querySelectorAll('[data-need]').forEach(cb => cb.onchange = () => {
+    settings.need = [...document.querySelectorAll('[data-need]:checked')].map(x => x.dataset.need);
+    onSettingsChange(false);
+});
+$('maxAge').onchange = e => { settings.maxAge = Math.max(0, +e.target.value || 0); onSettingsChange(false); };
+$('hideFree').onchange = e => { settings.hideFree = e.target.checked; if (settings.hideFree) settings.onlyFree = false; onSettingsChange(false); };
+$('onlyFree').onchange = e => { settings.onlyFree = e.target.checked; if (settings.onlyFree) settings.hideFree = false; onSettingsChange(false); };
+for (const k of ['students', 'requests', 'tokIn', 'tokOut']) {
+    $(k).onchange = e => { settings[k] = Math.max(0, +e.target.value || 0); onSettingsChange(true); };
+}
+$('vendors').onchange = e => { settings.vendors = e.target.value; onSettingsChange(true); };
+$('reset').onclick = () => { const cand = settings.candidates; settings = { ...DEFAULTS, candidates: cand }; onSettingsChange(true); };
+$('search').oninput = () => renderTable(visibleRows());
+$('copyEnv').onclick = async () => {
+    try { await navigator.clipboard.writeText($('candEnv').textContent); $('copyEnv').textContent = 'Скопировано'; }
+    catch { $('copyEnv').textContent = 'Выдели вручную'; }
+    setTimeout(() => { $('copyEnv').textContent = 'Скопировать'; }, 1500);
+};
+$('clearCand').onclick = () => { settings.candidates = []; save(); renderCandidates(); renderTable(visibleRows()); };
+if (matchMedia('(max-width: 900px)').matches) $('settingsBox').open = false;
+
+// ---------- Загрузка ----------
+
+async function start() {
+    $('status').innerHTML = '<span class="pill">Загружаю каталог…</span>';
+    try {
+        const r = await fetch(API, { cache: 'no-store' });
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || 'HTTP ' + r.status);
+        catalog = await r.json();
+        recompute();
+        render();
+    } catch (e) {
+        $('status').innerHTML = `<span class="pill stale">Не удалось загрузить каталог: ${esc(e.message)}</span> <button type="button" onclick="start()">Повторить</button>`;
+    }
+}
+
+let resizeTimer;
+addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => catalog && render(), 200); });
+
+syncInputs();
+start();
+</script>
+</body>
+</html>
