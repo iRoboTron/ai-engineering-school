@@ -205,6 +205,24 @@
         "file": "glossary.md",
         "title": "Словарик темы"
       }
+    ],
+    "12-dokumenty": [
+      {
+        "file": "book.md",
+        "title": "Тема 12: Картинки и длинные документы"
+      },
+      {
+        "file": "chapter-01.md",
+        "title": "Урок 1. Модель смотрит на картинку"
+      },
+      {
+        "file": "chapter-02.md",
+        "title": "Урок 2. Большое окно или RAG"
+      },
+      {
+        "file": "glossary.md",
+        "title": "Словарик темы"
+      }
     ]
   }
 }

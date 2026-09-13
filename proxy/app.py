@@ -53,6 +53,13 @@ ALLOWED_MODELS = {m.strip() for m in os.environ.get("AI9_MODELS", MODELI_PO_UMOL
 _DEFAULT = "qwen/qwen3.7-flash"
 DEFAULT_MODEL = os.environ.get("AI9_DEFAULT_MODEL", _DEFAULT if _DEFAULT in ALLOWED_MODELS else sorted(ALLOWED_MODELS)[0])
 
+# Модели, которые понимают картинки (тема 12): для запроса с картинкой резервную модель
+# выбираем только из них, иначе запасная модель просто не увидит изображение.
+VISION_MODELS = {m.strip() for m in os.environ.get(
+    "AI9_VISION_MODELS", "qwen/qwen3.7-flash,google/gemma-3-12b-it").split(",") if m.strip()}
+MAX_IMAGES = int(os.environ.get("AI9_MAX_IMAGES", "4"))              # картинок в одном запросе
+MAX_IMAGE_CHARS = int(os.environ.get("AI9_MAX_IMAGE_CHARS", "2000000"))  # ~1,5 МБ картинки в base64
+
 MAX_TOKENS_CAP = int(os.environ.get("AI9_MAX_TOKENS", "1024"))   # потолок длины ответа
 MAX_INPUT_CHARS = int(os.environ.get("AI9_MAX_INPUT", "40000"))  # потолок длины запроса
 PER_TOKEN_PER_HOUR = int(os.environ.get("AI9_RATE_HOUR", "120"))  # запросов в час на класс
@@ -118,6 +125,29 @@ def _est_otvet(response):
     if soobshchenie.get("tool_calls"):
         return True
     return bool((soobshchenie.get("content") or "").strip())
+
+
+def _razmer_zaprosa(messages):
+    """Длина текста запроса (без картинок) и число картинок.
+
+    Картинка в base64 весит десятки килобайт, и если считать её как текст, любой запрос
+    с фото упрётся в лимит длины. Поэтому картинки ограничиваем отдельно: по числу и размеру.
+    """
+    razmer, kartinki = 0, 0
+    for m in messages if isinstance(messages, list) else []:
+        content = m.get("content") if isinstance(m, dict) else None
+        if isinstance(content, list):
+            for chast in content:
+                if isinstance(chast, dict) and chast.get("type") == "image_url":
+                    kartinki += 1
+                    url = (chast.get("image_url") or {}).get("url", "")
+                    if len(url) > MAX_IMAGE_CHARS:
+                        raise HTTPException(413, "Картинка слишком большая: уменьши её до 1000 точек по длинной стороне")
+                else:
+                    razmer += len(json.dumps(chast, ensure_ascii=False))
+        else:
+            razmer += len(json.dumps(m, ensure_ascii=False))
+    return razmer, kartinki
 
 
 def _check_token(authorization, x_class_token):
@@ -311,14 +341,20 @@ UPSTREAM_HEADERS = {
 }
 
 
-async def _chat_stream(payload, token, model):
+def _poryadok_modeley(model, s_kartinkami):
+    """Сначала заказанная модель, потом остальные разрешённые (с картинками — только умеющие их видеть)."""
+    zapasnye = sorted(ALLOWED_MODELS & VISION_MODELS if s_kartinkami else ALLOWED_MODELS)
+    return [model] + [m for m in zapasnye if m != model]
+
+
+async def _chat_stream(payload, token, model, s_kartinkami=False):
     """Потоковый ответ (тема 10): куски текста пересылаются ученику по мере появления.
 
     Резервная модель работает так же, как без потока, но только до первого байта:
     если модель отказала сразу — берём следующую; если поток уже пошёл — назад дороги нет.
     """
     payload["stream_options"] = {"include_usage": True}
-    poryadok = [model] + [m for m in sorted(ALLOWED_MODELS) if m != model]
+    poryadok = _poryadok_modeley(model, s_kartinkami)
     client = httpx.AsyncClient(timeout=120)
     started = time.time()
     for kandidat in poryadok:
@@ -384,21 +420,27 @@ async def chat(request: Request, authorization: str = Header(None), x_class_toke
             f"Модель {model!r} не разрешена. Доступны: {', '.join(sorted(ALLOWED_MODELS))}",
         )
 
-    size = len(json.dumps(payload.get("messages", []), ensure_ascii=False))
+    size, kartinki = _razmer_zaprosa(payload.get("messages", []))
     if size > MAX_INPUT_CHARS:
         raise HTTPException(413, f"Запрос слишком длинный: {size} символов, максимум {MAX_INPUT_CHARS}")
+    if kartinki > MAX_IMAGES:
+        raise HTTPException(413, f"Слишком много картинок: {kartinki}, максимум {MAX_IMAGES}")
+    if kartinki and model not in VISION_MODELS:
+        raise HTTPException(400, f"Модель {model!r} не понимает картинки. Подойдут: {', '.join(sorted(VISION_MODELS & ALLOWED_MODELS))}")
+    payload["_s_kartinkami"] = bool(kartinki)
 
     payload["model"] = model
     payload["max_tokens"] = min(int(payload.get("max_tokens") or MAX_TOKENS_CAP), MAX_TOKENS_CAP)
+    s_kartinkami = payload.pop("_s_kartinkami")
     if payload.get("stream"):
-        return await _chat_stream(payload, token, model)
+        return await _chat_stream(payload, token, model, s_kartinkami)
 
     # Бесплатные модели у поставщиков общие на всех, поэтому они регулярно отвечают
     # «слишком много запросов». Для урока это смертельно: лаба делает подряд несколько
     # запросов и обрывается на середине. Поэтому при отказе пробуем следующую модель
     # из списка — ученик этого даже не замечает, а какая модель ответила на самом деле,
     # видно в заголовке ответа.
-    poryadok = [model] + [m for m in sorted(ALLOWED_MODELS) if m != model]
+    poryadok = _poryadok_modeley(model, s_kartinkami)
     VREMENNYE_OTKAZY = {429, 500, 502, 503, 504}
 
     started = time.time()
