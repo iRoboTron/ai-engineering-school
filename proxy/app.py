@@ -12,6 +12,7 @@
 import asyncio
 import json
 import os
+import re
 import time
 from collections import deque
 from pathlib import Path
@@ -139,9 +140,100 @@ async def health():
 # --- Витрина моделей (docs/books/models.html) ---
 # Каталог OpenRouter публичный, но из РФ браузер до него не достучится — поэтому
 # сервер забирает его сам, раз в час, и отдаёт только нужные странице поля.
+#
+# Рейтинг — открытый датасет LMArena (CC BY 4.0) на Hugging Face: люди вслепую
+# сравнивают ответы двух моделей. Берём общий зачёт и отдельный зачёт на русском.
+# Названия у LMArena свои, поэтому сопоставляем их с id OpenRouter по нормализованному
+# имени; приблизительные совпадения помечаем, чтобы их было видно на странице.
 CATALOG_TTL = int(os.environ.get("AI9_CATALOG_TTL", "3600"))
+ARENA_TTL = int(os.environ.get("AI9_ARENA_TTL", str(12 * 3600)))
+ARENA_URL = "https://huggingface.co/datasets/lmarena-ai/leaderboard-dataset/resolve/main/text/latest-00000-of-00001.parquet"
+# Зачёты LMArena, которые отдаём наружу: ключ в ответе API -> категория в датасете.
+ARENA_CATEGORIES = {
+    "overall": "overall", "russian": "russian", "coding": "coding", "math": "math",
+    "instructions": "instruction_following", "hard": "hard_prompts",
+    "creative": "creative_writing", "multi_turn": "multi_turn",
+}
+
 _catalog = {"data": None, "fetched_at": 0.0}
 _catalog_lock = asyncio.Lock()
+_arena = {"tables": {}, "published": None, "fetched_at": 0.0, "task": None, "error": None}
+
+_EFFORT = re.compile(r"(-(x?high|medium|low|minimal|thinking(-\d+k)?|reasoning|no-thinking|instant))+$")
+
+
+def _norm(name):
+    """Приводит id OpenRouter и имя LMArena к общему виду: gemini-3.8-flash-high -> gemini-3-8-flash.
+
+    Полные даты (20251101) убираем — это та же модель. Короткие снимки версий (2512, 02-23)
+    оставляем: mistral-large-2512 и mistral-large-2407 — разные модели.
+    """
+    s = name.lower().split("/")[-1].split(":")[0]
+    s = re.sub(r"\s*\(.*?\)", "", s).strip()
+    s = s.replace(".", "-").replace("_", "-").replace(" ", "-")
+    s = re.sub(r"-(\d{8}|\d{4}-\d{2}-\d{2})(?=-|$)", "", s)
+    for _ in range(2):
+        s = re.sub(r"-(it|preview|exp|latest|chat-latest)$", "", s)
+        s = _EFFORT.sub("", s)
+    return s
+
+
+def _loose(key):
+    """Без короткого снимка версии — только для приблизительного совпадения."""
+    return re.sub(r"-(\d{4}|\d{2}-\d{2}|\d{2}-\d{4})$", "", key)
+
+
+def _parse_arena(blob):
+    """Parquet -> {зачёт: (точные имена, приблизительные)}. Работает в потоке: pyarrow синхронный."""
+    import io
+    import pyarrow.parquet as pq
+
+    rows = pq.read_table(io.BytesIO(blob), columns=[
+        "model_name", "rating", "vote_count", "category", "leaderboard_publish_date"]).to_pylist()
+    wanted = {v: k for k, v in ARENA_CATEGORIES.items()}
+    tables = {k: ({}, {}) for k in ARENA_CATEGORIES}
+    for row in rows:
+        name = wanted.get(row["category"])
+        if name is None:
+            continue
+        strict, loose = tables[name]
+        key = _norm(row["model_name"])
+        # У LMArena одна модель встречается с разными режимами рассуждения — берём лучший.
+        for table, k in ((strict, key), (loose, _loose(key))):
+            if k not in table or row["rating"] > table[k]["rating"]:
+                table[k] = row
+    published = max((r["leaderboard_publish_date"] for r in rows), default=None)
+    return tables, published
+
+
+async def _refresh_arena():
+    try:
+        async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
+            r = await client.get(ARENA_URL)
+            r.raise_for_status()
+        _arena["tables"], _arena["published"] = await asyncio.to_thread(_parse_arena, r.content)
+        _arena["fetched_at"] = time.time()
+        _arena["error"] = None
+    except Exception as e:   # битый файл или сеть — витрина работает и без рейтинга
+        _arena["error"] = f"LMArena недоступна: {type(e).__name__}"
+        _arena["fetched_at"] = time.time() - ARENA_TTL + 300   # повторим через 5 минут, не на каждый запрос
+    finally:
+        _arena["task"] = None
+
+
+def _arena_lookup(tables, model_id):
+    strict, loose = tables
+    key = _norm(model_id)
+    if key in strict:
+        return strict[key], True
+    # Приблизительно: другой снимок той же линейки (mistral-large-2512 ≈ mistral-large-2407)
+    # или у LMArena есть только максимальный режим (claude-fable-5.1 ≈ claude-fable-5.1-max).
+    if _loose(key) in loose:
+        return loose[_loose(key)], False
+    for suffix in ("-max", "-high"):
+        if key + suffix in strict:
+            return strict[key + suffix], False
+    return None, False
 
 
 def _catalog_row(m):
@@ -161,6 +253,18 @@ def _catalog_row(m):
     }
 
 
+def _with_rating(row):
+    """Добавляет рейтинги: ratings = {зачёт: {rating, votes}}, плюс имя у LMArena и точность совпадения."""
+    out = dict(row, ratings={}, arena_name=None, arena_exact=None)
+    for category, tables in _arena["tables"].items():
+        hit, exact = _arena_lookup(tables, row["id"])
+        if hit:
+            out["ratings"][category] = {"rating": round(hit["rating"]), "votes": int(hit["vote_count"])}
+            if out["arena_name"] is None or category == "overall":
+                out["arena_name"], out["arena_exact"] = hit["model_name"], exact
+    return out
+
+
 @app.get("/api/catalog")
 async def catalog():
     async with _catalog_lock:
@@ -176,12 +280,22 @@ async def catalog():
                 if _catalog["data"] is None:
                     raise HTTPException(502, "OpenRouter не отдал каталог моделей, попробуй позже")
                 stale = True   # отдаём прошлый удачный каталог, но честно помечаем
+        # Рейтинг качается и разбирается в фоне: страница не ждёт, а спросит ещё раз.
+        if time.time() - _arena["fetched_at"] > ARENA_TTL and _arena["task"] is None:
+            _arena["task"] = asyncio.create_task(_refresh_arena())
     return {
         "fetched_at": _catalog["fetched_at"],
         "stale": stale,
         "allowed": sorted(ALLOWED_MODELS),
         "default_model": DEFAULT_MODEL,
-        "models": _catalog["data"],
+        "arena": {
+            "source": "LMArena, CC BY 4.0",
+            "categories": list(ARENA_CATEGORIES),
+            "published": _arena["published"],
+            "loading": _arena["task"] is not None,
+            "error": _arena["error"],
+        },
+        "models": [_with_rating(m) for m in _catalog["data"]],
     }
 
 
