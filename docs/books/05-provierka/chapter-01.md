@@ -1,5 +1,9 @@
 # Урок 1. Пять вопросов другу — не проверка
 
+> **Лабораторная этого урока:** считаем качество RAG на эталонном наборе.
+> - без интернета: [01_proverka.py](labs/tema5-provierka/01_proverka.py) — запуск `python3 01_proverka.py`, разобрана в разделе [«Практика: считаем качество своего RAG»](#практика-считаем-качество-своего-rag)
+> - на настоящей модели: [открыть в Google Colab](https://colab.research.google.com/github/iRoboTron/ai-engineering-school/blob/main/docs/books/labs/tema5-provierka/01_izmeryaem_kachestvo.ipynb) · [скачать .ipynb](labs/tema5-provierka/01_izmeryaem_kachestvo.ipynb)
+
 ## Знакомая ситуация
 
 Ты написал программу и проверил её на одном примере — работает. Учитель добавляет свой пример — падает. Знакомо?

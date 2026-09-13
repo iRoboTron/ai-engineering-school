@@ -29,7 +29,7 @@ flowchart TD
 ## Уроки темы
 
 - [Урок 1. Рецепт против повара](chapter-01.md) — чем агент отличается от обычной программы
-- [Урок 2. Свой агент и его границы](chapter-02.md) — лаба: агент с двумя инструментами, лимиты и память
+- [Урок 2. Свой агент и его границы](chapter-02.md) — лаба: агент с двумя инструментами, лимиты и память · лабораторная: [открыть в Colab](https://colab.research.google.com/github/iRoboTron/ai-engineering-school/blob/main/docs/books/labs/tema4-agenty/01_agent_s_granicami.ipynb)
 - [Словарик темы](glossary.md)
 
 ## Что понадобится

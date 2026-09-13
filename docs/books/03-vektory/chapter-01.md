@@ -1,5 +1,9 @@
 # Урок 1. Смысл как точка на карте
 
+> **Лабораторная этого урока:** ищем по смыслу через векторы и косинусную близость.
+> - без интернета: [01_poisk_po_smyslu.py](labs/tema3-vektory/01_poisk_po_smyslu.py) — запуск `python3 01_poisk_po_smyslu.py`, разобрана в разделе [«Практика: поиск по смыслу»](#практика-поиск-по-смыслу)
+> - на настоящей модели: [открыть в Google Colab](https://colab.research.google.com/github/iRoboTron/ai-engineering-school/blob/main/docs/books/labs/tema3-vektory/01_smysl_v_chislah.ipynb) · [скачать .ipynb](labs/tema3-vektory/01_smysl_v_chislah.ipynb)
+
 ## Начнём с того, что ты уже умеешь
 
 Возьмём задачу попроще: описать числами не смысл, а человека. Например, тремя числами от 0 до 1: «любит спорт», «любит музыку», «любит математику».

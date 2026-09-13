@@ -33,9 +33,9 @@ flowchart TD
 
 ## Уроки темы
 
-- [Урок 1. Как модель читает текст](chapter-01.md) — токены, контекстное окно
-- [Урок 2. Как модель придумывает ответ](chapter-02.md) — вероятности, температура, галлюцинации
-- [Урок 3. Как модель что-то делает](chapter-03.md) — ответ по форме и инструменты
+- [Урок 1. Как модель читает текст](chapter-01.md) — токены, контекстное окно · лабораторная: [открыть в Colab](https://colab.research.google.com/github/iRoboTron/ai-engineering-school/blob/main/docs/books/labs/tema1-llm-osnovy/01_tokeny.ipynb)
+- [Урок 2. Как модель придумывает ответ](chapter-02.md) — вероятности, температура, галлюцинации · лабораторная: [открыть в Colab](https://colab.research.google.com/github/iRoboTron/ai-engineering-school/blob/main/docs/books/labs/tema1-llm-osnovy/02_generaciya.ipynb)
+- [Урок 3. Как модель что-то делает](chapter-03.md) — ответ по форме и инструменты · лабораторная: [открыть в Colab](https://colab.research.google.com/github/iRoboTron/ai-engineering-school/blob/main/docs/books/labs/tema1-llm-osnovy/03_instrumenty.ipynb)
 - [Словарик темы](glossary.md) — все термины в одном месте
 
 ## Что понадобится для практики

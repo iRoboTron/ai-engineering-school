@@ -32,7 +32,7 @@ flowchart TD
 
 ## Уроки темы
 
-- [Урок 1. Смысл как точка на карте](chapter-01.md) — эмбеддинги, похожесть, лаба с поиском по смыслу
+- [Урок 1. Смысл как точка на карте](chapter-01.md) — эмбеддинги, похожесть, лаба с поиском по смыслу · лабораторная: [открыть в Colab](https://colab.research.google.com/github/iRoboTron/ai-engineering-school/blob/main/docs/books/labs/tema3-vektory/01_smysl_v_chislah.ipynb)
 - [Урок 2. Когда данных очень много](chapter-02.md) — почему перебор не работает и как ищут быстро
 - [Словарик темы](glossary.md)
 

@@ -31,7 +31,7 @@ flowchart TD
 
 ## Уроки темы
 
-- [Урок 1. Пять вопросов другу — не проверка](chapter-01.md) — эталонный набор, что измерять, лаба
+- [Урок 1. Пять вопросов другу — не проверка](chapter-01.md) — эталонный набор, что измерять, лаба · лабораторная: [открыть в Colab](https://colab.research.google.com/github/iRoboTron/ai-engineering-school/blob/main/docs/books/labs/tema5-provierka/01_izmeryaem_kachestvo.ipynb)
 - [Урок 2. Когда ИИ проверяет ИИ](chapter-02.md) — ИИ-судья, его ошибки, тихое падение качества
 - [Словарик темы](glossary.md)
 

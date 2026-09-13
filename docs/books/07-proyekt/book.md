@@ -29,7 +29,7 @@ flowchart TD
 
 ## Уроки темы
 
-- [Урок 1. Собираем свой проект](chapter-01.md) — что делать, из чего собрать, чек-лист готовности
+- [Урок 1. Собираем свой проект](chapter-01.md) — что делать, из чего собрать, чек-лист готовности · лабораторная: [открыть в Colab](https://colab.research.google.com/github/iRoboTron/ai-engineering-school/blob/main/docs/books/labs/tema7-proyekt/01_moy_proyekt.ipynb)
 - [Урок 2. Как о нём рассказать](chapter-02.md) — честность, структура рассказа, ответы на вопросы
 - [Словарик темы](glossary.md)
 

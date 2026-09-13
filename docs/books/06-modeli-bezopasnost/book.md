@@ -29,7 +29,7 @@ flowchart TD
 ## Уроки темы
 
 - [Урок 1. Где живёт модель](chapter-01.md) — облако против своего компьютера, «сначала самое простое»
-- [Урок 2. Как ИИ обманывают](chapter-02.md) — подмена инструкций, лаба, правила безопасности
+- [Урок 2. Как ИИ обманывают](chapter-02.md) — подмена инструкций, лаба, правила безопасности · лабораторная: [открыть в Colab](https://colab.research.google.com/github/iRoboTron/ai-engineering-school/blob/main/docs/books/labs/tema6-bezopasnost/01_podmena_instrukciy.ipynb)
 - [Словарик темы](glossary.md)
 
 ## Что понадобится

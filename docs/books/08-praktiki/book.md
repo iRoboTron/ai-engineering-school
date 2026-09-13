@@ -43,7 +43,7 @@ flowchart TD
 
 - [Урок 1. Разговор с моделью и работа с данными](chapter-01.md) — хорошие привычки из тем 1–3
 - [Урок 2. Агенты, безопасность и проверка](chapter-02.md) — хорошие привычки из тем 4–6
-- [Урок 3. Итоговый чек-лист и ревизия бота](chapter-03.md) — разбор плохого проекта и лабораторная
+- [Урок 3. Итоговый чек-лист и ревизия бота](chapter-03.md) — разбор плохого проекта · лабораторная: [открыть в Colab](https://colab.research.google.com/github/iRoboTron/ai-engineering-school/blob/main/docs/books/labs/tema8-praktiki/01_ispravlyaem_bota.ipynb)
 - [Словарик темы](glossary.md)
 
 ## Что понадобится

@@ -37,7 +37,7 @@ flowchart TD
 ## Уроки темы
 
 - [Урок 1. Экзамен с учебником и без](chapter-01.md) — идея RAG, нарезка на куски, честное «не знаю»
-- [Урок 2. Как искать нужный кусок](chapter-02.md) — поиск по словам, лаба: свой мини-RAG
+- [Урок 2. Как искать нужный кусок](chapter-02.md) — поиск по словам, лаба: свой мини-RAG · лабораторная: [открыть в Colab](https://colab.research.google.com/github/iRoboTron/ai-engineering-school/blob/main/docs/books/labs/tema2-rag/01_nastoyashchiy_rag.ipynb)
 - [Словарик темы](glossary.md)
 
 ## Что понадобится
