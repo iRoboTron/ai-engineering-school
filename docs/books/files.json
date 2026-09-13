@@ -187,6 +187,24 @@
         "file": "glossary.md",
         "title": "Словарик темы"
       }
+    ],
+    "11-nadezhnost": [
+      {
+        "file": "book.md",
+        "title": "Тема 11: Надёжность"
+      },
+      {
+        "file": "chapter-01.md",
+        "title": "Урок 1. Что может сломаться"
+      },
+      {
+        "file": "chapter-02.md",
+        "title": "Урок 2. Как не упасть"
+      },
+      {
+        "file": "glossary.md",
+        "title": "Словарик темы"
+      }
     ]
   }
 }
