@@ -13,7 +13,7 @@
     <script src="vendor/highlight.min.js"></script>
     <link rel="stylesheet" href="vendor/github-markdown-light.min.css">
     <script src="vendor/purify.min.js"></script>
-    <script src="reader-links.js?v=20260913-lab-links"></script>
+    <script src="reader-links.js?v=20260914-tema9"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html { scroll-behavior: smooth; }
@@ -517,7 +517,7 @@
 <script>
 marked.setOptions({ breaks: true, gfm: true });
 
-const ASSET_VERSION = '20260913-lab-links';
+const ASSET_VERSION = '20260914-tema9';
 
 const COURSE_NAMES = {
     "01-llm-osnovy": "Тема 1: Как устроена языковая модель",
@@ -528,6 +528,7 @@ const COURSE_NAMES = {
     "06-modeli-bezopasnost": "Тема 6: Модели и безопасность",
     "07-proyekt": "Тема 7: Свой проект",
     "08-praktiki": "Тема 8: Хорошие привычки",
+    "09-istoriya": "Тема 9: История и память",
 };
 
 const COURSE_ALIASES = {
@@ -539,9 +540,13 @@ const COURSE_ALIASES = {
     "modeli-bezopasnost": "06-modeli-bezopasnost", "security": "06-modeli-bezopasnost", "tema6": "06-modeli-bezopasnost",
     "proyekt": "07-proyekt", "project": "07-proyekt", "tema7": "07-proyekt",
     "praktiki": "08-praktiki", "practices": "08-praktiki", "tema8": "08-praktiki",
+    "istoriya": "09-istoriya", "history": "09-istoriya", "tema9": "09-istoriya",
 };
 
-const COURSE_PARTS = [{ id: 'course', from: 1, to: 8, title: 'Курс: ИИ для 9 класса' }];
+const COURSE_PARTS = [
+    { id: 'course', from: 1, to: 8, title: 'Курс: ИИ для 9 класса' },
+    { id: 'next', from: 9, to: 12, title: 'Продолжение: ИИ в работе' },
+];
 
 const contentEl = document.getElementById('content');
 const loadingMsg = document.getElementById('loadingMsg');
