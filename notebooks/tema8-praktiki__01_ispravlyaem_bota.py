@@ -26,12 +26,24 @@ MODEL = "qwen/qwen3.7-flash"
 
 try:
     from google.colab import userdata
-    KOD_KLASSA = userdata.get("AI9_KOD")
+    KOD_KLASSA = userdata.get("AI9_KOD") or os.environ.get("AI9_KOD")
 except Exception:
-    KOD_KLASSA = os.environ.get("AI9_KOD") or getpass.getpass("Код класса: ")
+    KOD_KLASSA = os.environ.get("AI9_KOD")
 
-client = OpenAI(base_url=ADRES, api_key=KOD_KLASSA)
-print("Подключились.")
+# Сервер проверит код, только когда мы обратимся к нему с ключом. Поэтому делаем один
+# лёгкий запрос (список моделей) и, если код не принят, спрашиваем его заново.
+client = None
+while client is None:
+    if not KOD_KLASSA:
+        KOD_KLASSA = getpass.getpass("Код класса: ")
+    client = OpenAI(base_url=ADRES, api_key=KOD_KLASSA)
+    try:
+        client.models.list()   # неверный код сервер не примет и ответит ошибкой
+        print("Всё хорошо: код подошёл. Модель:", MODEL)
+    except Exception:
+        print("Код не подошёл — проверь его у учителя и введи заново.")
+        client = None
+        KOD_KLASSA = None      # после ошибки код из секретов и окружения больше не берём
 
 # %% [markdown]
 # ## Шаг 1. Документы и эталонный набор — до всяких улучшений
