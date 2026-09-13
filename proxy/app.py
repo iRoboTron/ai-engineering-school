@@ -20,7 +20,7 @@ from pathlib import Path
 import httpx
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 # --- НАСТРОЙКИ (задаются в /etc/ai9-proxy.env) ---
 OPENROUTER_KEY = os.environ["OPENROUTER_API_KEY"]
@@ -305,6 +305,68 @@ async def models(authorization: str = Header(None), x_class_token: str = Header(
     return {"object": "list", "data": [{"id": name, "object": "model"} for name in sorted(ALLOWED_MODELS)]}
 
 
+UPSTREAM_HEADERS = {
+    "HTTP-Referer": "https://ai9.adelfos.ru",
+    "X-Title": "AI dlya 9 klassa",
+}
+
+
+async def _chat_stream(payload, token, model):
+    """Потоковый ответ (тема 10): куски текста пересылаются ученику по мере появления.
+
+    Резервная модель работает так же, как без потока, но только до первого байта:
+    если модель отказала сразу — берём следующую; если поток уже пошёл — назад дороги нет.
+    """
+    payload["stream_options"] = {"include_usage": True}
+    poryadok = [model] + [m for m in sorted(ALLOWED_MODELS) if m != model]
+    client = httpx.AsyncClient(timeout=120)
+    started = time.time()
+    for kandidat in poryadok:
+        payload["model"] = kandidat
+        request = client.build_request(
+            "POST", f"{UPSTREAM}/chat/completions", json=payload,
+            headers={"Authorization": f"Bearer {OPENROUTER_KEY}", **UPSTREAM_HEADERS},
+        )
+        try:
+            response = await client.send(request, stream=True)
+        except httpx.RequestError as error:
+            _log({"ts": time.time(), "token": token, "model": kandidat, "stream": True, "error": str(error)})
+            continue
+        if response.status_code in {429, 500, 502, 503, 504}:
+            await response.aclose()
+            _log({"ts": time.time(), "token": token, "model": kandidat, "stream": True,
+                  "status": response.status_code, "note": "временный отказ, пробуем следующую"})
+            continue
+
+        async def peredat(response=response, kandidat=kandidat):
+            usage = {}
+            try:
+                async for line in response.aiter_lines():
+                    if line.startswith("data: {") and '"usage"' in line:
+                        try:
+                            usage = json.loads(line[6:]).get("usage") or usage
+                        except ValueError:
+                            pass
+                    yield (line + "\n").encode()
+            finally:
+                await response.aclose()
+                await client.aclose()
+                _log({"ts": time.time(), "token": token, "model": kandidat, "zaprosheno": model,
+                      "stream": True, "status": response.status_code,
+                      "seconds": round(time.time() - started, 2),
+                      "prompt_tokens": usage.get("prompt_tokens"),
+                      "completion_tokens": usage.get("completion_tokens")})
+
+        return StreamingResponse(
+            peredat(), status_code=response.status_code,
+            media_type=response.headers.get("content-type", "text/event-stream"),
+            headers={"X-AI9-Model": kandidat, "Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    await client.aclose()
+    raise HTTPException(502, "Ни одна модель сейчас не отвечает. Попробуйте через минуту.")
+
+
 @app.post("/api/v1/chat/completions")
 async def chat(request: Request, authorization: str = Header(None), x_class_token: str = Header(None)):
     token = _check_token(authorization, x_class_token)
@@ -328,7 +390,8 @@ async def chat(request: Request, authorization: str = Header(None), x_class_toke
 
     payload["model"] = model
     payload["max_tokens"] = min(int(payload.get("max_tokens") or MAX_TOKENS_CAP), MAX_TOKENS_CAP)
-    payload.pop("stream", None)  # поток не поддерживаем: в ноутбуках он не нужен
+    if payload.get("stream"):
+        return await _chat_stream(payload, token, model)
 
     # Бесплатные модели у поставщиков общие на всех, поэтому они регулярно отвечают
     # «слишком много запросов». Для урока это смертельно: лаба делает подряд несколько

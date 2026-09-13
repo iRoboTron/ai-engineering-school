@@ -1,0 +1,445 @@
+# %% [markdown]
+# # Лаборатория 10. Цена и скорость на живой модели
+#
+# **Что мы сделаем:** посчитаем настоящие деньги за настоящие запросы и настоящие секунды
+# ожидания — и попробуем уменьшить и то и другое, не испортив ответы.
+#
+# | Шаг | Что узнаем |
+# |---|---|
+# | 1 | Настоящие цены моделей: берём прямо из каталога |
+# | 2 | Два счётчика: сколько стоит вход, а сколько выход |
+# | 3 | Длина ответа: болтливо, коротко, коротко с потолком |
+# | 4 | Маршрутизатор: правило по словам и модель-сортировщик |
+# | 5 | Кэш ответов: повторный вопрос бесплатно |
+# | 6 | Время: обычный ответ против потокового |
+# | 7 | Параллельные запросы: очередь против пачки |
+#
+# **Что понадобится:** код класса от учителя. **Запросов:** около 45.
+
+# %%
+!pip -q install openai
+
+# %%
+import getpass
+import json
+import os
+import re
+import time
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor
+
+from openai import OpenAI
+
+ADRES = "https://ai9.adelfos.ru/api/v1"
+MODEL = "qwen/qwen3.7-flash"
+
+try:
+    from google.colab import userdata
+    KOD_KLASSA = userdata.get("AI9_KOD")
+except Exception:
+    KOD_KLASSA = os.environ.get("AI9_KOD") or getpass.getpass("Код класса: ")
+
+client = OpenAI(base_url=ADRES, api_key=KOD_KLASSA)
+print("Подключились.")
+
+# %% [markdown]
+# ## Шаг 1. Настоящие цены
+#
+# У школьного сервера есть открытый каталог моделей с ценами из OpenRouter — тот же, что
+# показывает витрина моделей. Код класса для него не нужен. Возьмём цены тех моделей,
+# которые разрешены нашему классу.
+
+# %%
+with urllib.request.urlopen("https://ai9.adelfos.ru/api/catalog", timeout=60) as otvet:
+    KATALOG = json.load(otvet)
+
+CENY = {}
+for m in KATALOG["models"]:
+    if m["id"] in KATALOG["allowed"]:
+        CENY[m["id"]] = {"vhod": float(m["prompt"]) * 1e6, "vyhod": float(m["completion"]) * 1e6}
+
+print(f"{'модель':<28} {'вход $/1М':>10} {'выход $/1М':>11} {'выход дороже в':>15}")
+for model_id, c in sorted(CENY.items(), key=lambda x: x[1]["vyhod"]):
+    raz = c["vyhod"] / c["vhod"] if c["vhod"] else float("nan")
+    print(f"{model_id:<28} {c['vhod']:>10.3f} {c['vyhod']:>11.3f} {raz:>13.1f} раз")
+
+# %% [markdown]
+# Все разрешённые классу модели — дешёвые: так настроен школьный сервер, чтобы урок стоил
+# копейки. Сильные модели бывают в 30–300 раз дороже (посмотри витрину). Но пропорции
+# почти везде похожи: **выход дороже входа**, чаще всего в 3–5 раз. Посмотри на колонку
+# справа: у какой модели разница меньше?
+#
+# Сделаем функцию, которая переводит `usage` из ответа в доллары — по цене той модели,
+# которая **на самом деле** ответила (сервер может переключиться на резервную).
+
+# %%
+def cena(model_id, usage):
+    c = CENY.get(model_id) or CENY[MODEL]
+    return usage.prompt_tokens * c["vhod"] / 1e6, usage.completion_tokens * c["vyhod"] / 1e6
+
+
+def sprosit(voprosy_ili_soobshcheniya, model=MODEL, pravila="Ты помощник школы.", **dop):
+    """Один запрос. Возвращает словарь со всем, что стоит посмотреть."""
+    if isinstance(voprosy_ili_soobshcheniya, str):
+        soobshcheniya = [{"role": "system", "content": pravila},
+                         {"role": "user", "content": voprosy_ili_soobshcheniya}]
+    else:
+        soobshcheniya = voprosy_ili_soobshcheniya
+    start = time.perf_counter()
+    otvet = client.chat.completions.create(model=model, temperature=0, messages=soobshcheniya, **dop)
+    sekundy = time.perf_counter() - start
+    vhod, vyhod = cena(otvet.model, otvet.usage)
+    return {
+        "tekst": (otvet.choices[0].message.content or "").strip(),
+        "model": otvet.model, "usage": otvet.usage, "sekundy": sekundy,
+        "vhod_$": vhod, "vyhod_$": vyhod, "finish": otvet.choices[0].finish_reason,
+    }
+
+# %% [markdown]
+# ## Шаг 2. Два счётчика в одном ответе
+#
+# Зададим один обычный вопрос и разложим его цену на вход и выход.
+
+# %%
+r = sprosit("Как подготовиться к контрольной по истории?")
+u = r["usage"]
+vsego = r["vhod_$"] + r["vyhod_$"]
+print(r["tekst"][:300], "…\n")
+print(f"ответила: {r['model']}, за {r['sekundy']:.1f} с")
+print(f"вход:  {u.prompt_tokens:>4} токенов → ${r['vhod_$']:.7f}  ({r['vhod_$'] / vsego:.0%} цены)")
+print(f"выход: {u.completion_tokens:>4} токенов → ${r['vyhod_$']:.7f}  ({r['vyhod_$'] / vsego:.0%} цены)")
+print(f"\nНа 10 000 таких вопросов в месяц: ${vsego * 10_000:.2f}")
+
+# %% [markdown]
+# Посмотри на проценты. Запрос короткий — два десятка токенов, а ответ длинный — сотни.
+# Почти вся цена оказалась в **выходе**. Дешевле всего здесь сэкономить не на вопросе,
+# а на длине ответа.
+
+# %% [markdown]
+# ## Шаг 3. Длина ответа: три варианта
+#
+# Один и тот же простой вопрос, три настройки:
+#
+# 1. **Без указаний** — модель пишет, сколько хочет.
+# 2. **Коротко в правилах** — просим одно-два предложения.
+# 3. **Коротко + `max_tokens=40`** — просьба плюс жёсткий потолок.
+
+# %%
+VOPROS = "Где обычно находится школьная столовая и когда в неё лучше идти?"
+VARIANTY = [
+    ("без указаний", dict(pravila="Ты помощник школы.")),
+    ("коротко в правилах", dict(pravila="Ты помощник школы. Отвечай одним-двумя предложениями.")),
+    ("коротко + max_tokens=40", dict(pravila="Ты помощник школы. Отвечай одним-двумя предложениями.", max_tokens=40)),
+]
+
+rezultaty = []
+for nazvanie, nastroyki in VARIANTY:
+    r = sprosit(VOPROS, **nastroyki)
+    rezultaty.append((nazvanie, r))
+    print(f"--- {nazvanie} ---")
+    print(r["tekst"])
+    print(f"[выход {r['usage'].completion_tokens} токенов, {r['sekundy']:.1f} с, finish_reason={r['finish']}]\n")
+
+baza = rezultaty[0][1]
+print(f"{'вариант':<26} {'выход':>6} {'секунд':>7} {'цена':>12} {'от первого':>11}")
+for nazvanie, r in rezultaty:
+    c = r["vhod_$"] + r["vyhod_$"]
+    print(f"{nazvanie:<26} {r['usage'].completion_tokens:>6} {r['sekundy']:>7.1f} ${c:>11.7f} {c / (baza['vhod_$'] + baza['vyhod_$']):>10.0%}")
+
+# %% [markdown]
+# **Что посмотреть в выводе:**
+#
+# 1. Вариант 2 обычно в разы короче первого — и во столько же раз дешевле и быстрее.
+#    Одна фраза в правилах.
+# 2. Вариант 3: посмотри на `finish_reason`. Если там `length` — потолок **оборвал**
+#    ответ, и последнее предложение, скорее всего, недописано. Если `stop` — модель
+#    уложилась сама, а потолок просто подстраховал.
+# 3. Отсюда правило из урока: `max_tokens` — страховка, а не способ сделать ответ
+#    коротким. Короткий ответ делает просьба, а обрывающий — потолок.
+#
+# **Вариант:** поставь `max_tokens=15` и перезапусти. Как выглядит оборванный ответ?
+# Можно ли такой показывать ученику?
+
+# %% [markdown]
+# ## Шаг 4. Маршрутизатор
+#
+# У нашего класса нет по-настоящему дорогих моделей, поэтому договоримся честно:
+# **«дешёвая»** — `mistralai/mistral-nemo`, **«сильная»** — `qwen/qwen3.7-flash`. Разница
+# в цене между ними небольшая, но механизм тот же, что с разницей в сто раз.
+#
+# Сначала — **правило по словам**, бесплатное и мгновенное.
+
+# %%
+DESHEVAYA, SILNAYA = "mistralai/mistral-nemo", "qwen/qwen3.7-flash"
+SLOZHNYE_SLOVA = ["почему", "объясни", "сравни", "докажи", "реши"]
+
+VOPROSY = [
+    "Во сколько начинаются уроки?",
+    "Объясни, почему зимой холоднее, чем летом",
+    "Нужна ли сменная обувь?",
+    "Реши: у Пети 3 яблока, у Маши вдвое больше. Сколько всего?",
+    "Где взять справку для бассейна?",
+    "Чем отличается вирус от бактерии?",           # сложный, но без «сложных» слов
+]
+
+
+def po_slovam(vopros):
+    return SILNAYA if any(s in vopros.lower() for s in SLOZHNYE_SLOVA) else DESHEVAYA
+
+
+for v in VOPROSY:
+    print(f"{'СИЛЬНАЯ ' if po_slovam(v) == SILNAYA else 'дешёвая '} ← {v}")
+
+# %% [markdown]
+# Посмотри на последний вопрос: он сложный, но в нём нет ни одного «сложного» слова —
+# правило отправило его дешёвой модели. Так правило по словам и ошибается.
+#
+# Теперь — **модель-сортировщик**: дешёвая модель читает вопрос и отвечает одним словом
+# в JSON. Это лишний запрос, но копеечный.
+
+# %%
+PRAVILO_SORTIROVKI = (
+    "Определи, сложный ли вопрос школьника. Сложный — если нужно объяснять, рассуждать, "
+    "решать или сравнивать. Простой — если это факт или справка. "
+    'Ответь JSON: {"slozhnost": "простой"} или {"slozhnost": "сложный"}.'
+)
+
+
+def sortirovshchik(vopros):
+    r = sprosit([{"role": "system", "content": PRAVILO_SORTIROVKI}, {"role": "user", "content": vopros}],
+                model=DESHEVAYA, max_tokens=20, response_format={"type": "json_object"})
+    try:
+        slozhnyy = json.loads(r["tekst"]).get("slozhnost") == "сложный"
+    except json.JSONDecodeError:
+        slozhnyy = True          # не разобрали ответ — перестрахуемся сильной моделью
+    return (SILNAYA if slozhnyy else DESHEVAYA), r["vhod_$"] + r["vyhod_$"], r["tekst"]
+
+
+print(f"{'по словам':<9} | {'сортировщик':<11} | стоимость сортировки | вопрос")
+marshruty = {}
+for v in VOPROSY:
+    model_s, cena_s, syroe = sortirovshchik(v)
+    marshruty[v] = model_s
+    flag = "  ← разошлись" if model_s != po_slovam(v) else ""
+    print(f"{'сильная' if po_slovam(v) == SILNAYA else 'дешёвая':<9} | {'сильная' if model_s == SILNAYA else 'дешёвая':<11} | ${cena_s:.7f}          | {v}{flag}")
+
+# %% [markdown]
+# Сортировщик, скорее всего, отправил вопрос про вирус сильной модели — он понимает смысл,
+# а не ищет слова. Посмотри на стоимость сортировки: это миллионные доли доллара.
+#
+# Теперь сравним деньги: ответим на все вопросы «всё на сильной» и «по маршруту сортировщика».
+
+# %%
+PRAVILA_BOTA = "Ты помощник школы. Отвечай понятно, не длиннее трёх предложений."
+itog = {"всё на сильной": 0.0, "по маршруту": 0.0}
+for v in VOPROSY:
+    r_sil = sprosit(v, model=SILNAYA, pravila=PRAVILA_BOTA, max_tokens=150)
+    itog["всё на сильной"] += r_sil["vhod_$"] + r_sil["vyhod_$"]
+    if marshruty[v] == SILNAYA:
+        itog["по маршруту"] += r_sil["vhod_$"] + r_sil["vyhod_$"]     # тот же ответ, не зовём дважды
+    else:
+        r_desh = sprosit(v, model=DESHEVAYA, pravila=PRAVILA_BOTA, max_tokens=150)
+        itog["по маршруту"] += r_desh["vhod_$"] + r_desh["vyhod_$"]
+        print(f"дешёвая на «{v}»:\n   {r_desh['tekst'][:160]}")
+
+print()
+for k, v in itog.items():
+    print(f"{k:<16} ${v:.7f}   на 100 000 вопросов: ${v / len(VOPROSY) * 100_000:.2f}")
+
+# %% [markdown]
+# **Что посмотреть в выводе:**
+#
+# 1. Прочитай ответы дешёвой модели на простые вопросы. Годятся ли они? Если да —
+#    маршрутизатор ничего не испортил.
+# 2. Разница в деньгах здесь небольшая, потому что и «сильная» у нас дешёвая. Умножь
+#    мысленно цену сильной на 100 — так выглядит настоящий выбор между моделями.
+# 3. Не забудь, что сортировщик сам стоит денег: в честном сравнении его цену нужно
+#    прибавить к маршруту. Проверь, окупается ли он, в задании 2 ниже.
+
+# %% [markdown]
+# ## Шаг 5. Кэш ответов
+#
+# Школьники часто спрашивают одно и то же, просто по-разному пишут: с вопросительным
+# знаком и без, с большой буквы и с маленькой. Ключ кэша должен эти мелочи не замечать.
+
+# %%
+kesh = {}
+zhurnal_kesha = []
+
+
+def klyuch(vopros):
+    return re.sub(r"[^\w\s]", "", vopros.lower()).strip()
+
+
+def otvetit_s_keshem(vopros):
+    k = klyuch(vopros)
+    start = time.perf_counter()
+    if k in kesh:
+        zhurnal_kesha.append(("ПОПАЛ", vopros, time.perf_counter() - start, 0.0))
+        return kesh[k]
+    r = sprosit(vopros, model=DESHEVAYA, pravila=PRAVILA_BOTA, max_tokens=120)
+    kesh[k] = r["tekst"]
+    zhurnal_kesha.append(("МИМО", vopros, r["sekundy"], r["vhod_$"] + r["vyhod_$"]))
+    return r["tekst"]
+
+
+POTOK_VOPROSOV = [
+    "Когда каникулы?", "когда каникулы", "Где столовая?", "Когда каникулы?!",
+    "ГДЕ СТОЛОВАЯ", "Нужна ли сменная обувь?", "где столовая?", "Когда каникулы",
+]
+for v in POTOK_VOPROSOV:
+    otvetit_s_keshem(v)
+
+print(f"{'':<6} {'вопрос':<28} {'время':>10} {'цена':>12}")
+for status, v, sek, c in zhurnal_kesha:
+    print(f"{status:<6} {v:<28} {sek * 1000:>8.1f} мс ${c:>11.7f}")
+
+popal = sum(1 for z in zhurnal_kesha if z[0] == "ПОПАЛ")
+print(f"\nИз {len(POTOK_VOPROSOV)} вопросов модель звали {len(POTOK_VOPROSOV) - popal} раза, "
+      f"из кэша — {popal}. Что лежит в кэше:")
+for k, v in kesh.items():
+    print(f"  «{k}» → {v[:70]}…")
+
+# %% [markdown]
+# **Что посмотреть в выводе:**
+#
+# 1. «ПОПАЛ» отвечает за доли миллисекунды и за ноль долларов. «МИМО» — за секунду и деньги.
+# 2. «Когда каникулы?», «когда каникулы» и «Когда каникулы?!» — один ключ. Без функции
+#    `klyuch` это были бы три разных вопроса и три запроса.
+# 3. А теперь опасный вариант: добавь в поток «Какие у меня оценки?» от двух разных
+#    учеников. Кэш отдаст второму ответ первому — вспомни «Найди ошибку» из урока 1.
+
+# %% [markdown]
+# ## Шаг 6. Время: обычный ответ против потокового
+#
+# Попросим ответ подлиннее и измерим два времени:
+#
+# * **до первого текста** — когда пользователь увидел, что бот живой;
+# * **до конца** — когда ответ дописан.
+#
+# Сначала обычный запрос. У него оба времени одинаковые: текст появляется весь сразу.
+
+# %%
+DLINNYY_VOPROS = "Расскажи в пяти-шести предложениях, как устроена Солнечная система."
+soobshcheniya = [{"role": "system", "content": "Ты помощник школы."}, {"role": "user", "content": DLINNYY_VOPROS}]
+
+start = time.perf_counter()
+obychnyy = client.chat.completions.create(model=MODEL, temperature=0, max_tokens=300, messages=soobshcheniya)
+vremya_obychnoe = time.perf_counter() - start
+print(f"Обычный запрос: текст появился через {vremya_obychnoe:.2f} с — сразу весь, "
+      f"{obychnyy.usage.completion_tokens} токенов.")
+
+# %% [markdown]
+# Теперь то же самое **потоком**. Будем печатать каждый пришедший кусочек вместе с тем,
+# через сколько секунд он пришёл. Смотри на первую строку и на последнюю.
+
+# %%
+start = time.perf_counter()
+pervyy = None
+kuski = []
+potok = client.chat.completions.create(model=MODEL, temperature=0, max_tokens=300,
+                                       messages=soobshcheniya, stream=True)
+for kusok in potok:
+    if not kusok.choices or not kusok.choices[0].delta.content:
+        continue                                   # служебные куски без текста
+    moment = time.perf_counter() - start
+    if pervyy is None:
+        pervyy = moment
+    kuski.append((moment, kusok.choices[0].delta.content))
+
+vremya_potoka = time.perf_counter() - start
+print("Первые 12 кусочков и когда они пришли:")
+for moment, tekst in kuski[:12]:
+    print(f"  {moment:5.2f} с  {tekst!r}")
+print(f"  … всего кусочков: {len(kuski)}")
+print(f"\nПоток: первый текст через {pervyy:.2f} с, конец через {vremya_potoka:.2f} с")
+print(f"Обычный: текст через {vremya_obychnoe:.2f} с")
+print(f"\nСобранный ответ:\n{''.join(t for _, t in kuski)}")
+
+# %% [markdown]
+# **Что посмотреть в выводе:**
+#
+# 1. Первый кусочек потока приходит намного раньше, чем обычный ответ целиком.
+#    Пользователь уже читает, а обычный бот ещё молчит.
+# 2. **Конец** потока — примерно тогда же, когда обычный ответ. Поток не ускоряет модель.
+# 3. Кусочки — это не слова и не токены ровно: поставщик сам решает, как их нарезать.
+#    Поэтому весь текст нужно собирать через `''.join(...)` — ровно та ошибка из
+#    «Найди ошибку» урока 2, где JSON разбирали по кусочку.
+#
+# **Вариант:** поставь `max_tokens=40`. Как изменились оба времени у обычного запроса?
+
+# %% [markdown]
+# ## Шаг 7. Параллельные запросы
+#
+# Пять независимых вопросов. Сначала по очереди, потом одновременно. Для каждого вопроса
+# печатаем, когда он начался и когда закончился относительно старта.
+
+# %%
+PYAT = [
+    "Сколько планет в Солнечной системе?",
+    "Кто написал «Евгения Онегина»?",
+    "Сколько градусов в прямом угле?",
+    "Какая самая длинная река в России?",
+    "Что такое фотосинтез в одном предложении?",
+]
+
+
+def zamerit(vopros, start):
+    nachalo = time.perf_counter() - start
+    r = sprosit(vopros, model=DESHEVAYA, pravila="Отвечай одним предложением.", max_tokens=60)
+    return vopros, nachalo, time.perf_counter() - start, r["tekst"]
+
+
+print("ПО ОЧЕРЕДИ")
+start = time.perf_counter()
+po_ocheredi = [zamerit(v, start) for v in PYAT]
+vsego_po_ocheredi = time.perf_counter() - start
+for v, s, f, _ in po_ocheredi:
+    print(f"  {s:5.2f} → {f:5.2f} с  {'·' * int(s * 10)}{'█' * max(1, int((f - s) * 10))}  {v}")
+
+print("\nОДНОВРЕМЕННО")
+start = time.perf_counter()
+with ThreadPoolExecutor(max_workers=5) as ispolniteli:
+    odnovremenno = list(ispolniteli.map(lambda v: zamerit(v, start), PYAT))
+vsego_odnovremenno = time.perf_counter() - start
+for v, s, f, _ in odnovremenno:
+    print(f"  {s:5.2f} → {f:5.2f} с  {'·' * int(s * 10)}{'█' * max(1, int((f - s) * 10))}  {v}")
+
+print(f"\nПо очереди: {vsego_po_ocheredi:.1f} с   одновременно: {vsego_odnovremenno:.1f} с   "
+      f"быстрее в {vsego_po_ocheredi / vsego_odnovremenno:.1f} раза")
+print("\nОтветы:")
+for v, _, _, t in odnovremenno:
+    print(f"  {v} → {t}")
+
+# %% [markdown]
+# **Как читать полоски:** точки — ожидание своей очереди, квадраты — сам запрос.
+#
+# 1. **По очереди** полоски идут лесенкой: каждый вопрос ждёт, пока закончится предыдущий.
+# 2. **Одновременно** все полоски начинаются в ноль, а общее время — примерно как у самого
+#    долгого вопроса.
+# 3. Ответы те же — деньги те же. Выиграно только время.
+#
+# **Не увлекайся:** у школьного сервера лимит 120 запросов в час на класс. Если поставить
+# `max_workers=50` и отправить 50 вопросов разом, половина получит отказ — это тема 11.
+
+# %% [markdown]
+# ## Попробуй сам
+#
+# 1. **Болтливость дорога.** В шаге 2 спроси что-нибудь сложное без просьбы «коротко»
+#    и посчитай, какая доля цены пришлась на выход.
+# 2. **Окупается ли сортировщик?** Сложи стоимость всех вызовов `sortirovshchik` из шага 4
+#    и прибавь к «по маршруту». Всё ещё дешевле, чем «всё на сильной»? А если бы сильная
+#    стоила в 100 раз дороже?
+# 3. **Кэш с временем жизни.** Храни в кэше пару `(ответ, время)` и считай попаданием только
+#    ответы моложе 10 секунд. Проверь: задай вопрос, подожди 11 секунд, задай снова.
+# 4. **Поток со своим видом.** В шаге 6 печатай ответ по-настоящему, как чат-бот:
+#    `print(kusok, end="", flush=True)` без меток времени.
+#
+# ## Что унести с собой
+#
+# * Цена = вход × цена входа + выход × цена выхода; выход дороже в несколько раз.
+# * Коротко делает просьба в правилах, а `max_tokens` лишь страхует — и может оборвать.
+# * Маршрутизатор отправляет сильной модели только то, что без неё не решить.
+# * Кэш ответов — бесплатно и мгновенно, но не для личного и не для творческого.
+# * Поток не ускоряет модель, но показывает текст сразу; собирай его целиком перед разбором.
+# * Независимые запросы — пачкой, в пределах лимита.
