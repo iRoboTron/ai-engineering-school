@@ -430,6 +430,11 @@ async def chat(request: Request, authorization: str = Header(None), x_class_toke
     payload["_s_kartinkami"] = bool(kartinki)
 
     payload["model"] = model
+    # Размышляющие модели (qwen3.7-flash и др.) по умолчанию тратят весь max_tokens на скрытые
+    # размышления и возвращают пустой текст — прокси считал это отказом и уходил на резервную.
+    # Для уроков размышления не нужны: выключаем, если ученик сам явно не попросил.
+    if os.environ.get("AI9_REASONING_OFF", "1") == "1":
+        payload.setdefault("reasoning", {"enabled": False})
     payload["max_tokens"] = min(int(payload.get("max_tokens") or MAX_TOKENS_CAP), MAX_TOKENS_CAP)
     s_kartinkami = payload.pop("_s_kartinkami")
     if payload.get("stream"):
